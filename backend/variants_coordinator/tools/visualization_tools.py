@@ -11,19 +11,17 @@ from google.adk.tools import FunctionTool, ToolContext
 from ..models.variant import deserialize_data_from_artifact
 from ..models.visualization import VisualizationType
 from ..services.chart_data_service import ChartDataService
-from ..core.acmg_genes import (
-    ACMG_GENES_BY_CATEGORY, GeneCategory
-)
+from ..core.acmg_genes import ACMG_GENES_BY_CATEGORY, GeneCategory
 
 logger = structlog.get_logger(__name__)
 
 
 async def generate_chart_data_tool(
-        chart_type: str,
-        dimension: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        tool_context: ToolContext = None
+    chart_type: str,
+    dimension: Optional[str] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    limit: Optional[int] = None,
+    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Generate chart data based on the requested type and parameters.
@@ -46,51 +44,62 @@ async def generate_chart_data_tool(
     except ValueError:
         return {
             "status": "error",
-            "message": f"Invalid chart type: {chart_type}. Valid types: {[e.value for e in VisualizationType]}"
+            "message": f"Invalid chart type: {chart_type}. Valid types: {[e.value for e in VisualizationType]}",
         }
 
     # Check if annotations are available
-    annotations_artifact_name = tool_context.state.get('annotations_artifact_name')
+    annotations_artifact_name = tool_context.state.get("annotations_artifact_name")
     if not annotations_artifact_name:
         return {
             "status": "error",
-            "message": "No analysis results available. Please complete the analysis first."
+            "message": "No analysis results available. Please complete the analysis first.",
         }
 
     try:
         # Load annotations artifact
-        tool_logger.info("Loading annotations for visualization",
-                         artifact=annotations_artifact_name,
-                         chart_type=chart_type)
+        tool_logger.info(
+            "Loading annotations for visualization",
+            artifact=annotations_artifact_name,
+            chart_type=chart_type,
+        )
 
-        annotations_artifact = await tool_context.load_artifact(filename=annotations_artifact_name)
+        annotations_artifact = await tool_context.load_artifact(
+            filename=annotations_artifact_name
+        )
         annotations_data = deserialize_data_from_artifact(annotations_artifact)
 
         # Extract components
-        annotations = annotations_data.get('annotations', {})
-        frequencies = annotations_data.get('frequencies', {})
-        analysis_mode = annotations_data.get('analysis_mode', 'clinical')
-        total_variants_analyzed = annotations_data.get('total_variants_analyzed', 0)
+        annotations = annotations_data.get("annotations", {})
+        frequencies = annotations_data.get("frequencies", {})
+        analysis_mode = annotations_data.get("analysis_mode", "clinical")
+        total_variants_analyzed = annotations_data.get("total_variants_analyzed", 0)
 
-        tool_logger.info(f"Loaded {len(annotations)} annotations in {analysis_mode} mode")
+        tool_logger.info(
+            f"Loaded {len(annotations)} annotations in {analysis_mode} mode"
+        )
 
         # Pre-filter annotations by gene if a gene filter is specified
         # This ensures all chart types (including heatmaps) respect the gene filter
         if filters and "gene" in filters:
             gene_filter = filters["gene"].upper()
             annotations = {
-                vid: ann for vid, ann in annotations.items()
+                vid: ann
+                for vid, ann in annotations.items()
                 if ann.gene_symbol and ann.gene_symbol.upper() == gene_filter
             }
             # Also filter frequencies to match
-            frequencies = {vid: freq for vid, freq in frequencies.items() if vid in annotations}
-            tool_logger.info(f"Pre-filtered to {len(annotations)} annotations for gene {gene_filter}")
+            frequencies = {
+                vid: freq for vid, freq in frequencies.items() if vid in annotations
+            }
+            tool_logger.info(
+                f"Pre-filtered to {len(annotations)} annotations for gene {gene_filter}"
+            )
 
         # Initialize chart service
         chart_service = ChartDataService(
             annotations=annotations,
             frequencies=frequencies,
-            analysis_mode=analysis_mode
+            analysis_mode=analysis_mode,
         )
 
         # Generate chart data based on type and dimension
@@ -104,7 +113,9 @@ async def generate_chart_data_tool(
             elif dimension == "impact":
                 chart_data = chart_service.get_impact_distribution()
             elif dimension in ("frequency", "top_variants"):
-                chart_data = chart_service.get_top_variants_by_frequency(limit=limit or 20)
+                chart_data = chart_service.get_top_variants_by_frequency(
+                    limit=limit or 20
+                )
             elif dimension == "category" and analysis_mode == "clinical":
                 chart_data = chart_service.get_acmg_category_distribution()
             else:
@@ -133,7 +144,7 @@ async def generate_chart_data_tool(
         if not chart_data:
             return {
                 "status": "error",
-                "message": f"Unable to generate {chart_type} chart for dimension {dimension}"
+                "message": f"Unable to generate {chart_type} chart for dimension {dimension}",
             }
 
         # Apply filters if provided (only for list-based chart data, not heatmaps/dicts)
@@ -151,8 +162,8 @@ async def generate_chart_data_tool(
                 "total_annotations": len(annotations),
                 "total_variants_analyzed": total_variants_analyzed,
                 "filters_applied": filters or {},
-                "data_points": len(chart_data) if isinstance(chart_data, list) else 1
-            }
+                "data_points": len(chart_data) if isinstance(chart_data, list) else 1,
+            },
         }
 
         # Add mode-specific context
@@ -161,23 +172,22 @@ async def generate_chart_data_tool(
         else:
             response["metadata"]["context"] = "Comprehensive genome-wide analysis"
 
-        tool_logger.info(f"Generated {chart_type} chart with {len(chart_data)} data points")
+        tool_logger.info(
+            f"Generated {chart_type} chart with {len(chart_data)} data points"
+        )
         return response
 
     except Exception as e:
         tool_logger.exception(f"Error generating chart data: {e}")
-        return {
-            "status": "error",
-            "message": f"Failed to generate chart: {str(e)}"
-        }
+        return {"status": "error", "message": f"Failed to generate chart: {str(e)}"}
 
 
 async def compare_populations_tool(
-        gene: Optional[str] = None,
-        populations: Optional[List[str]] = None,
-        significance_filter: Optional[str] = None,
-        limit: Optional[int] = None,
-        tool_context: ToolContext = None
+    gene: Optional[str] = None,
+    populations: Optional[List[str]] = None,
+    significance_filter: Optional[str] = None,
+    limit: Optional[int] = None,
+    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Compare variant frequencies across different populations.
@@ -195,21 +205,20 @@ async def compare_populations_tool(
     tool_logger = logger.bind(tool="compare_populations")
 
     # Check annotations availability
-    annotations_artifact_name = tool_context.state.get('annotations_artifact_name')
+    annotations_artifact_name = tool_context.state.get("annotations_artifact_name")
     if not annotations_artifact_name:
-        return {
-            "status": "error",
-            "message": "No analysis results available."
-        }
+        return {"status": "error", "message": "No analysis results available."}
 
     try:
         # Load data
-        annotations_artifact = await tool_context.load_artifact(filename=annotations_artifact_name)
+        annotations_artifact = await tool_context.load_artifact(
+            filename=annotations_artifact_name
+        )
         annotations_data = deserialize_data_from_artifact(annotations_artifact)
 
-        annotations = annotations_data.get('annotations', {})
-        frequencies = annotations_data.get('frequencies', {})
-        analysis_mode = annotations_data.get('analysis_mode', 'clinical')
+        annotations = annotations_data.get("annotations", {})
+        frequencies = annotations_data.get("frequencies", {})
+        analysis_mode = annotations_data.get("analysis_mode", "clinical")
 
         # Default populations if not specified
         if not populations:
@@ -223,15 +232,17 @@ async def compare_populations_tool(
 
         if gene:
             filtered_annotations = {
-                vid: ann for vid, ann in annotations.items()
+                vid: ann
+                for vid, ann in annotations.items()
                 if ann.gene_symbol and ann.gene_symbol.upper() == gene.upper()
             }
 
         if significance_filter:
             filtered_annotations = {
-                vid: ann for vid, ann in filtered_annotations.items()
-                if ann.clinical_significance and
-                   significance_filter.lower() in ann.clinical_significance.lower()
+                vid: ann
+                for vid, ann in filtered_annotations.items()
+                if ann.clinical_significance
+                and significance_filter.lower() in ann.clinical_significance.lower()
             }
 
         # Apply limit
@@ -252,7 +263,7 @@ async def compare_populations_tool(
                 "variant_id": variant_id,
                 "gene": annotation.gene_symbol,
                 "significance": annotation.clinical_significance,
-                "populations": {}
+                "populations": {},
             }
 
             # Map population codes to frequencies
@@ -264,7 +275,7 @@ async def compare_populations_tool(
                 "FIN": "af_fin",
                 "ASJ": "af_asj",
                 "SAS": "af_sas",
-                "OTH": "af_oth"
+                "OTH": "af_oth",
             }
 
             for pop in populations:
@@ -281,7 +292,9 @@ async def compare_populations_tool(
         # Calculate population statistics
         pop_stats = calculate_population_statistics(comparison_data, populations)
 
-        tool_logger.info(f"Compared {len(comparison_data)} variants across {len(populations)} populations")
+        tool_logger.info(
+            f"Compared {len(comparison_data)} variants across {len(populations)} populations"
+        )
 
         return {
             "status": "success",
@@ -293,25 +306,20 @@ async def compare_populations_tool(
             "metadata": {
                 "analysis_mode": analysis_mode,
                 "total_variants_compared": len(comparison_data),
-                "filters": {
-                    "gene": gene,
-                    "significance": significance_filter
-                }
-            }
+                "filters": {"gene": gene, "significance": significance_filter},
+            },
         }
 
     except Exception as e:
         tool_logger.exception(f"Error comparing populations: {e}")
         return {
             "status": "error",
-            "message": f"Failed to compare populations: {str(e)}"
+            "message": f"Failed to compare populations: {str(e)}",
         }
 
 
 async def filter_by_category_tool(
-        category: str,
-        include_frequencies: bool = True,
-        tool_context: ToolContext = None
+    category: str, include_frequencies: bool = True, tool_context: ToolContext = None
 ) -> Dict[str, Any]:
     """
     Filter variants by disease category (clinical mode only).
@@ -327,28 +335,27 @@ async def filter_by_category_tool(
     tool_logger = logger.bind(tool="filter_by_category")
 
     # Check annotations
-    annotations_artifact_name = tool_context.state.get('annotations_artifact_name')
+    annotations_artifact_name = tool_context.state.get("annotations_artifact_name")
     if not annotations_artifact_name:
-        return {
-            "status": "error",
-            "message": "No analysis results available."
-        }
+        return {"status": "error", "message": "No analysis results available."}
 
     try:
         # Load data
-        annotations_artifact = await tool_context.load_artifact(filename=annotations_artifact_name)
+        annotations_artifact = await tool_context.load_artifact(
+            filename=annotations_artifact_name
+        )
         annotations_data = deserialize_data_from_artifact(annotations_artifact)
 
-        annotations = annotations_data.get('annotations', {})
-        frequencies = annotations_data.get('frequencies', {})
-        analysis_mode = annotations_data.get('analysis_mode', 'clinical')
+        annotations = annotations_data.get("annotations", {})
+        frequencies = annotations_data.get("frequencies", {})
+        analysis_mode = annotations_data.get("analysis_mode", "clinical")
 
         # Category filtering only works in clinical mode
         if analysis_mode != "clinical":
             return {
                 "status": "error",
                 "message": "Category filtering is only available in clinical mode for ACMG genes.",
-                "suggestion": "Try filtering by chromosome, gene, or significance instead."
+                "suggestion": "Try filtering by chromosome, gene, or significance instead.",
             }
 
         # Map category string to GeneCategory enum
@@ -356,14 +363,14 @@ async def filter_by_category_tool(
             "cancer": GeneCategory.CANCER,
             "cardiovascular": GeneCategory.CARDIOVASCULAR,
             "metabolic": GeneCategory.METABOLIC,
-            "other": GeneCategory.OTHER
+            "other": GeneCategory.OTHER,
         }
 
         category_enum = category_mapping.get(category.lower())
         if not category_enum:
             return {
                 "status": "error",
-                "message": f"Invalid category: {category}. Valid categories: {list(category_mapping.keys())}"
+                "message": f"Invalid category: {category}. Valid categories: {list(category_mapping.keys())}",
             }
 
         # Get genes in this category
@@ -378,7 +385,7 @@ async def filter_by_category_tool(
                     "gene": annotation.gene_symbol,
                     "significance": annotation.clinical_significance,
                     "condition": annotation.condition,
-                    "category": category
+                    "category": category,
                 }
 
                 # Add frequencies if requested
@@ -386,16 +393,20 @@ async def filter_by_category_tool(
                     freq_data = frequencies[variant_id]
                     variant_data["frequencies"] = {
                         "global": freq_data.get("af", 0),
-                        "source": freq_data.get("source", "Unknown")
+                        "source": freq_data.get("source", "Unknown"),
                     }
 
                 filtered_data.append(variant_data)
 
         # Calculate category statistics
         gene_counts = Counter(v["gene"] for v in filtered_data)
-        significance_counts = Counter(v["significance"] for v in filtered_data if v["significance"])
+        significance_counts = Counter(
+            v["significance"] for v in filtered_data if v["significance"]
+        )
 
-        tool_logger.info(f"Filtered {len(filtered_data)} variants in {category} category")
+        tool_logger.info(
+            f"Filtered {len(filtered_data)} variants in {category} category"
+        )
 
         return {
             "status": "success",
@@ -406,26 +417,22 @@ async def filter_by_category_tool(
                 "unique_genes": len(gene_counts),
                 "gene_distribution": dict(gene_counts),
                 "significance_distribution": dict(significance_counts),
-                "genes_in_category": sorted(list(genes_in_category))
+                "genes_in_category": sorted(list(genes_in_category)),
             },
             "metadata": {
                 "analysis_mode": "clinical",
-                "category_description": category_enum.value
-            }
+                "category_description": category_enum.value,
+            },
         }
 
     except Exception as e:
         tool_logger.exception(f"Error filtering by category: {e}")
-        return {
-            "status": "error",
-            "message": f"Failed to filter by category: {str(e)}"
-        }
+        return {"status": "error", "message": f"Failed to filter by category: {str(e)}"}
 
 
 # Helper functions
 def apply_filters_to_chart_data(
-        chart_data: List[Dict[str, Any]],
-        filters: Dict[str, Any]
+    chart_data: List[Dict[str, Any]], filters: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     """Apply filters to chart data."""
     filtered = chart_data
@@ -436,7 +443,11 @@ def apply_filters_to_chart_data(
         elif key == "max_frequency":
             filtered = [d for d in filtered if d.get("frequency", 1) <= value]
         elif key == "significance":
-            filtered = [d for d in filtered if value.lower() in d.get("significance", "").lower()]
+            filtered = [
+                d
+                for d in filtered
+                if value.lower() in d.get("significance", "").lower()
+            ]
         elif key == "gene":
             filtered = [d for d in filtered if d.get("gene") == value]
 
@@ -444,15 +455,14 @@ def apply_filters_to_chart_data(
 
 
 def calculate_population_statistics(
-        comparison_data: List[Dict[str, Any]],
-        populations: List[str]
+    comparison_data: List[Dict[str, Any]], populations: List[str]
 ) -> Dict[str, Any]:
     """Calculate statistics across populations."""
     stats = {
         "mean_frequencies": {},
         "variants_present": {},
         "variants_absent": {},
-        "population_specific": {}
+        "population_specific": {},
     }
 
     for pop in populations:
@@ -478,8 +488,7 @@ def calculate_population_statistics(
             for variant in comparison_data:
                 this_pop_freq = variant["populations"].get(pop, 0)
                 other_pops_freq = [
-                    variant["populations"].get(p, 0)
-                    for p in populations if p != pop
+                    variant["populations"].get(p, 0) for p in populations if p != pop
                 ]
                 if this_pop_freq > 0 and all(f == 0 for f in other_pops_freq):
                     pop_specific.append(variant["variant_id"])

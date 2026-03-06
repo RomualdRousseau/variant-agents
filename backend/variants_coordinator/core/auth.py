@@ -2,15 +2,17 @@
 Handles all Firebase Admin SDK initialization, authentication, and
 provides the shared Firestore client instance.
 """
-import structlog
-from typing import Dict, Any
+
+from typing import Any, Dict
 
 import firebase_admin
-from firebase_admin import auth, credentials
+import structlog
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from firebase_admin import auth, credentials
 
 from ..core import clients
+from ..core.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -28,12 +30,13 @@ def initialize_firebase_and_clients():
         return
 
     try:
-        # Using Application Default Credentials (ADC) 
+        # Using Application Default Credentials (ADC)
         cred = credentials.ApplicationDefault()
         _firebase_app = firebase_admin.initialize_app(cred)
 
         # Get the AsyncClient
         from firebase_admin import firestore
+
         clients.db = firestore.AsyncClient()
 
         logger.info("Firebase Admin SDK initialized successfully with AsyncClient.")
@@ -62,7 +65,7 @@ def verify_firebase_token(authorization: str) -> Dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header"
+            detail="Missing or invalid Authorization header",
         )
 
     token = authorization.split("Bearer ")[1]
@@ -72,16 +75,19 @@ def verify_firebase_token(authorization: str) -> Dict[str, Any]:
 
         email = decoded_token.get("email", "")
         if email:
-            # Extract domain from email
-            domain = email.lower().split('@')[-1]
-            # Check if it's google.com/altostrat.com or a subdomain of these
-            if not (domain == 'google.com' or
-                    domain == 'altostrat.com' or
-                    domain.endswith('.google.com') or
-                    domain.endswith('.altostrat.com')):
+            domain = email.lower().split("@")[-1]
+            allowed_domains = [
+                d.strip() for d in settings.allowed_auth_domains.split(",")
+            ]
+
+            is_allowed = any(
+                domain == d or domain.endswith(f".{d}") for d in allowed_domains
+            )
+
+            if not is_allowed:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access restricted to @google.com and @altostrat.com email addresses"
+                    detail=f"Access restricted to allowed domains '{allowed_domains}'. Your domain is '{domain}'.",
                 )
 
         logger.debug("Token verified successfully", uid=decoded_token.get("uid"))
@@ -92,12 +98,12 @@ def verify_firebase_token(authorization: str) -> Dict[str, Any]:
         logger.warning("Firebase token verification failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}"
+            detail=f"Invalid authentication token: {str(e)}",
         )
 
 
 async def get_current_user(
-        creds: HTTPAuthorizationCredentials = Depends(security)
+    creds: HTTPAuthorizationCredentials = Depends(security),
 ) -> Dict[str, Any]:
     """
     FastAPI dependency to verify the Firebase ID token and return the decoded user claims.

@@ -1,7 +1,8 @@
 """Application configuration."""
 
-from pydantic_settings import BaseSettings
 from typing import Optional
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -39,10 +40,30 @@ class Settings(BaseSettings):
     # VertexAI Configuration for Session Persistence
     agent_engine_id: Optional[str] = None
     vertex_ai_location: str = "us-central1"
-    use_vertex_ai_sessions: bool = False  # Set to True when agent_engine_id is configured
+    use_vertex_ai_sessions: bool = (
+        False  # Set to True when agent_engine_id is configured
+    )
 
     # Firebase Configuration
     firebase_project_id: Optional[str] = None  # Defaults to gcp_project_id if not set
+    allowed_auth_domains: str = ",".join(
+        [
+            "google.com",
+            "altostrat.com",
+        ]
+    )
+
+    # CORS Configuration
+    cors_production_origins: str = ",".join(
+        [
+            "http://localhost:3000",  # Local development
+            "http://localhost:3001",  # Alternative local port
+            "https://variant-intake-agents.firebaseapp.com",  # Firebase hosting
+            "https://variant-intake-agents.web.app",  # Alternative Firebase domain
+        ]
+    )
+
+    public_api_prefix: Optional[str] = None
 
     @property
     def effective_firebase_project_id(self) -> str:

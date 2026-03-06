@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Set environment variables to prevent Python from writing .pyc files
 ENV PYTHONDONTWRITEBYTECODE 1
@@ -70,4 +70,4 @@ COPY . .
 EXPOSE 8080
 
 # The command to run your app using uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips='*'"]

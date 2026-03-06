@@ -19,12 +19,12 @@ class SessionMetadataService:
         self.collection = "user_sessions"
 
     async def create_metadata(
-            self,
-            session_id: str,
-            firebase_uid: str,
-            vcf_path: Optional[str] = None,
-            title: Optional[str] = None,
-            analysis_mode: str = "clinical"
+        self,
+        session_id: str,
+        firebase_uid: str,
+        vcf_path: Optional[str] = None,
+        title: Optional[str] = None,
+        analysis_mode: str = "clinical",
     ) -> Dict[str, Any]:
         """Create metadata record for a new session."""
         doc_ref = self.db.collection(self.collection).document(session_id)
@@ -48,18 +48,18 @@ class SessionMetadataService:
             "annotations_count": None,
             "error_message": None,
             "notes": None,
-            "tags": []
+            "tags": [],
         }
 
         await doc_ref.set(metadata)
-        logger.info("Created session metadata", session_id=session_id, analysis_mode=analysis_mode)
+        logger.info(
+            "Created session metadata",
+            session_id=session_id,
+            analysis_mode=analysis_mode,
+        )
         return metadata
 
-    async def update_metadata(
-            self,
-            session_id: str,
-            **updates
-    ) -> None:
+    async def update_metadata(self, session_id: str, **updates) -> None:
         """Update specific fields in session metadata."""
         doc_ref = self.db.collection(self.collection).document(session_id)
         updates["updated_at"] = firestore.SERVER_TIMESTAMP
@@ -69,11 +69,15 @@ class SessionMetadataService:
             logger.info(
                 "Updating analysis mode for session",
                 session_id=session_id,
-                new_mode=updates["analysis_mode"]
+                new_mode=updates["analysis_mode"],
             )
 
         await doc_ref.update(updates)
-        logger.debug("Updated session metadata", session_id=session_id, fields=list(updates.keys()))
+        logger.debug(
+            "Updated session metadata",
+            session_id=session_id,
+            fields=list(updates.keys()),
+        )
 
     async def get_metadata(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a specific session."""
@@ -90,10 +94,7 @@ class SessionMetadataService:
         return None
 
     async def list_user_sessions(
-            self,
-            firebase_uid: str,
-            limit: int = 20,
-            offset: int = 0
+        self, firebase_uid: str, limit: int = 20, offset: int = 0
     ) -> List[Dict[str, Any]]:
         """List sessions for a user, ordered by creation date."""
         query = (
@@ -127,7 +128,7 @@ class SessionMetadataService:
                 "vep_status": session_data.get("vep_status"),
                 "report_status": session_data.get("report_status"),
                 "summary": session_data.get("summary"),
-                "tags": session_data.get("tags", [])
+                "tags": session_data.get("tags", []),
             }
             sessions.append(session_summary)
 
@@ -140,10 +141,7 @@ class SessionMetadataService:
         logger.info("Deleted session metadata", session_id=session_id)
 
     async def get_sessions_by_mode(
-            self,
-            firebase_uid: str,
-            analysis_mode: str,
-            limit: int = 20
+        self, firebase_uid: str, analysis_mode: str, limit: int = 20
     ) -> List[Dict[str, Any]]:
         """Get sessions filtered by analysis mode."""
         query = (
@@ -161,19 +159,15 @@ class SessionMetadataService:
 
         logger.info(
             f"Retrieved {len(sessions)} {analysis_mode} mode sessions for user",
-            firebase_uid=firebase_uid
+            firebase_uid=firebase_uid,
         )
         return sessions
 
     async def update_analysis_stats(
-            self,
-            session_id: str,
-            mode_stats: Dict[str, Any]
+        self, session_id: str, mode_stats: Dict[str, Any]
     ) -> None:
         """Update session with mode-specific analysis statistics."""
-        updates = {
-            "updated_at": firestore.SERVER_TIMESTAMP
-        }
+        updates = {"updated_at": firestore.SERVER_TIMESTAMP}
 
         # Add mode-specific stats
         if "acmg_genes_analyzed" in mode_stats:
@@ -187,15 +181,14 @@ class SessionMetadataService:
         logger.info(
             "Updated session with analysis statistics",
             session_id=session_id,
-            stats=list(mode_stats.keys())
+            stats=list(mode_stats.keys()),
         )
 
-    async def get_session_summary_stats(
-            self,
-            firebase_uid: str
-    ) -> Dict[str, Any]:
+    async def get_session_summary_stats(self, firebase_uid: str) -> Dict[str, Any]:
         """Get summary statistics for all user sessions."""
-        query = self.db.collection(self.collection).where("firebase_uid", "==", firebase_uid)
+        query = self.db.collection(self.collection).where(
+            "firebase_uid", "==", firebase_uid
+        )
 
         docs = query.stream()
 
@@ -206,7 +199,7 @@ class SessionMetadataService:
             "completed_sessions": 0,
             "failed_sessions": 0,
             "total_variants_analyzed": 0,
-            "total_pathogenic_found": 0
+            "total_pathogenic_found": 0,
         }
 
         async for doc in docs:

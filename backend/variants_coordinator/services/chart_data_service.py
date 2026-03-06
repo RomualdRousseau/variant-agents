@@ -9,7 +9,8 @@ import structlog
 
 from ..models.variant import VariantAnnotation
 from ..core.acmg_genes import (
-    get_gene_category, GeneCategory,
+    get_gene_category,
+    GeneCategory,
 )
 
 logger = structlog.get_logger(__name__)
@@ -21,10 +22,10 @@ class ChartDataService:
     """
 
     def __init__(
-            self,
-            annotations: Dict[str, VariantAnnotation],
-            frequencies: Dict[str, Dict],
-            analysis_mode: str = "clinical"
+        self,
+        annotations: Dict[str, VariantAnnotation],
+        frequencies: Dict[str, Dict],
+        analysis_mode: str = "clinical",
     ):
         """
         Initialize the chart data service.
@@ -39,7 +40,9 @@ class ChartDataService:
         self.analysis_mode = analysis_mode
         self.logger = logger.bind(service="chart_data")
 
-    def get_chromosome_distribution(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_chromosome_distribution(
+        self, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
         Get variant distribution by chromosome.
 
@@ -51,9 +54,9 @@ class ChartDataService:
         for variant_id in self.annotations:
             # Extract chromosome from variant_id (format: chr:pos:ref>alt)
             try:
-                chrom = variant_id.split(':')[0]
+                chrom = variant_id.split(":")[0]
                 chrom_counts[chrom] += 1
-            except:
+            except:  # noqa: E722
                 continue
 
         # Sort chromosomes naturally (1-22, X, Y)
@@ -63,16 +66,16 @@ class ChartDataService:
         numeric_chroms = []
         for chrom in chrom_counts:
             try:
-                num = int(chrom.replace('chr', ''))
+                num = int(chrom.replace("chr", ""))
                 numeric_chroms.append((num, chrom))
-            except:
+            except:  # noqa: E722
                 pass
 
         numeric_chroms.sort(key=lambda x: x[0])
         sorted_chroms.extend([c[1] for c in numeric_chroms])
 
         # Add X and Y if present
-        for special in ['chrX', 'X', 'chrY', 'Y']:
+        for special in ["chrX", "X", "chrY", "Y"]:
             if special in chrom_counts:
                 sorted_chroms.append(special)
 
@@ -80,11 +83,13 @@ class ChartDataService:
         chart_data = []
         for chrom in sorted_chroms:
             if chrom in chrom_counts:
-                chart_data.append({
-                    "name": chrom,
-                    "value": chrom_counts[chrom],
-                    "category": "chromosome"
-                })
+                chart_data.append(
+                    {
+                        "name": chrom,
+                        "value": chrom_counts[chrom],
+                        "category": "chromosome",
+                    }
+                )
 
         if limit:
             chart_data = chart_data[:limit]
@@ -102,7 +107,9 @@ class ChartDataService:
             List of gene distribution data
         """
         gene_counts = Counter()
-        gene_significance = defaultdict(lambda: {"pathogenic": 0, "benign": 0, "vus": 0})
+        gene_significance = defaultdict(
+            lambda: {"pathogenic": 0, "benign": 0, "vus": 0}
+        )
 
         for variant_id, annotation in self.annotations.items():
             if annotation.gene_symbol:
@@ -123,11 +130,7 @@ class ChartDataService:
 
         chart_data = []
         for gene, count in top_genes:
-            data_point = {
-                "name": gene,
-                "value": count,
-                "category": "gene"
-            }
+            data_point = {"name": gene, "value": count, "category": "gene"}
 
             # Add ACMG category if in clinical mode
             if self.analysis_mode == "clinical":
@@ -156,14 +159,14 @@ class ChartDataService:
             "HIGH": "High Impact",
             "MODERATE": "Moderate Impact",
             "LOW": "Low Impact",
-            "MODIFIER": "Modifier"
+            "MODIFIER": "Modifier",
         }
 
         for annotation in self.annotations.values():
             # Try to get impact from annotation
             # This would come from VEP data if available
             impact = None
-            if hasattr(annotation, 'impact'):
+            if hasattr(annotation, "impact"):
                 impact = annotation.impact
 
             if impact:
@@ -174,12 +177,14 @@ class ChartDataService:
         chart_data = []
         for impact in ["HIGH", "MODERATE", "LOW", "MODIFIER", "Unknown"]:
             if impact in impact_counts:
-                chart_data.append({
-                    "name": impact_map.get(impact, impact),
-                    "value": impact_counts[impact],
-                    "category": "impact",
-                    "severity": impact
-                })
+                chart_data.append(
+                    {
+                        "name": impact_map.get(impact, impact),
+                        "value": impact_counts[impact],
+                        "category": "impact",
+                        "severity": impact,
+                    }
+                )
 
         return chart_data
 
@@ -221,17 +226,19 @@ class ChartDataService:
             "Likely Benign",
             "Benign",
             "Not Provided",
-            "Other"
+            "Other",
         ]
 
         chart_data = []
         for category in ordered_categories:
             if category in sig_counts:
-                chart_data.append({
-                    "name": category,
-                    "value": sig_counts[category],
-                    "category": "significance"
-                })
+                chart_data.append(
+                    {
+                        "name": category,
+                        "value": sig_counts[category],
+                        "category": "significance",
+                    }
+                )
 
         return chart_data
 
@@ -258,13 +265,17 @@ class ChartDataService:
         chart_data = []
         for category_enum in GeneCategory:
             if category_enum.value in category_counts:
-                chart_data.append({
-                    "name": category_enum.value,
-                    "value": category_counts[category_enum.value],
-                    "category": "acmg_category",
-                    "unique_genes": len(category_genes[category_enum.value]),
-                    "genes": sorted(list(category_genes[category_enum.value]))[:10]  # Top 10 genes
-                })
+                chart_data.append(
+                    {
+                        "name": category_enum.value,
+                        "value": category_counts[category_enum.value],
+                        "category": "acmg_category",
+                        "unique_genes": len(category_genes[category_enum.value]),
+                        "genes": sorted(list(category_genes[category_enum.value]))[
+                            :10
+                        ],  # Top 10 genes
+                    }
+                )
 
         return chart_data
 
@@ -300,15 +311,17 @@ class ChartDataService:
             else:
                 af_label = f"{af:.2e}"
 
-            variant_freq_list.append({
-                "name": f"{gene} ({variant_id})",
-                "value": af,
-                "gene": gene,
-                "variant_id": variant_id,
-                "significance": significance,
-                "label": af_label,
-                "category": "frequency"
-            })
+            variant_freq_list.append(
+                {
+                    "name": f"{gene} ({variant_id})",
+                    "value": af,
+                    "gene": gene,
+                    "variant_id": variant_id,
+                    "significance": significance,
+                    "label": af_label,
+                    "category": "frequency",
+                }
+            )
 
         # Sort by frequency descending and take top N
         variant_freq_list.sort(key=lambda x: x["value"], reverse=True)
@@ -346,7 +359,7 @@ class ChartDataService:
         bin_edges = []
         for i in range(bins + 1):
             log_val = log_min + (log_max - log_min) * i / bins
-            bin_edges.append(10 ** log_val)
+            bin_edges.append(10**log_val)
 
         # Count variants in each bin
         bin_counts = [0] * bins
@@ -377,13 +390,15 @@ class ChartDataService:
             else:
                 end_label = f"{end:.4f}"
 
-            chart_data.append({
-                "name": f"{start_label} - {end_label}",
-                "value": bin_counts[i],
-                "range_start": start,
-                "range_end": end,
-                "category": "frequency_bin"
-            })
+            chart_data.append(
+                {
+                    "name": f"{start_label} - {end_label}",
+                    "value": bin_counts[i],
+                    "range_start": start,
+                    "range_end": end,
+                    "category": "frequency_bin",
+                }
+            )
 
         return chart_data
 
@@ -406,7 +421,7 @@ class ChartDataService:
             "FIN": "af_fin",
             "ASJ": "af_asj",
             "SAS": "af_sas",
-            "OTH": "af_oth"
+            "OTH": "af_oth",
         }
 
         # Select variants with frequency data
@@ -416,8 +431,7 @@ class ChartDataService:
                 freq_data = self.frequencies[variant_id]
                 # Check if any population frequency exists
                 has_pop_freq = any(
-                    freq_data.get(pop_mapping[pop], 0) > 0
-                    for pop in populations
+                    freq_data.get(pop_mapping[pop], 0) > 0 for pop in populations
                 )
                 if has_pop_freq:
                     variants_with_freq.append((variant_id, annotation))
@@ -455,11 +469,7 @@ class ChartDataService:
             "rows": rows,
             "columns": populations,
             "values": values,
-            "color_scale": {
-                "min": 0,
-                "max": 6,
-                "label": "-log10(AF)"
-            }
+            "color_scale": {"min": 0, "max": 6, "label": "-log10(AF)"},
         }
 
     def get_frequency_vs_significance_scatter(self) -> List[Dict[str, Any]]:
@@ -478,17 +488,22 @@ class ChartDataService:
 
                 if af > 0:  # Only include variants with known frequency
                     # Map significance to numeric value for Y-axis
-                    sig_value = self._significance_to_numeric(annotation.clinical_significance)
+                    sig_value = self._significance_to_numeric(
+                        annotation.clinical_significance
+                    )
 
-                    scatter_data.append({
-                        "x": math.log10(af) if af > 0 else -6,
-                        "y": sig_value,
-                        "variant_id": variant_id,
-                        "gene": annotation.gene_symbol,
-                        "frequency": af,
-                        "significance": annotation.clinical_significance or "Not Provided",
-                        "category": "variant"
-                    })
+                    scatter_data.append(
+                        {
+                            "x": math.log10(af) if af > 0 else -6,
+                            "y": sig_value,
+                            "variant_id": variant_id,
+                            "gene": annotation.gene_symbol,
+                            "frequency": af,
+                            "significance": annotation.clinical_significance
+                            or "Not Provided",
+                            "category": "variant",
+                        }
+                    )
 
         return scatter_data
 

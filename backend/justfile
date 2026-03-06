@@ -1,0 +1,369 @@
+set dotenv-load
+
+# Define defaults for envsubst to pick up
+export WORKER_URL := env_var_or_default("WORKER_URL", "http://PENDING-GKE-IP/worker/run-vep")
+export VEP_FORK_COUNT := env_var_or_default("VEP_FORK_COUNT", "28")
+export GRPC_DNS_RESOLVER := env_var_or_default("GRPC_DNS_RESOLVER", "native")
+
+# Default is this help
+default: help
+
+# Print the available recipes
+help:
+    @just --justfile {{justfile()}} --list
+
+# Build the backend docker image and push it to Google Artifact Registry
+build:
+  gcloud builds submit --tag=$GOOGLE_CLOUD_LOCATION-docker.pkg.dev/$GOOGLE_CLOUD_PROJECT/prod/genomics-agent:latest
+
+# Deploy the backend to GKE and restart the deployment
+deploy:
+  envsubst < gke/genomics-deployment.yaml | kubectl apply -f -
+  kubectl set env deployment/genomics-agent WORKER_URL=$WORKER_URL
+  kubectl rollout restart deployment/genomics-agent
+
+# Deploy the backend to GKE with IAP and restart the deployment
+deploy-iap:
+  envsubst < gke/genomics-deployment-iap.yaml | kubectl apply -f -
+  kubectl set env deployment/genomics-agent WORKER_URL=$WORKER_URL
+  kubectl rollout restart deployment/genomics-agent
+
+# View the status of backend pods in Kubernetes
+status:
+  kubectl get pods -l app=genomics-agent
+
+# Tail the latest 25 log lines from the backend pods
+logs:
+  kubectl logs -l app=genomics-agent --tail=25
+
+# Port-forward the backend deployment to localhost:8080
+start:
+  kubectl port-forward deployment/genomics-agent 8080:8080
+
+# --- 1. Google Cloud Services Setup (One-Time) ---
+
+# Create Firestore Database
+setup-firestore:
+  gcloud firestore databases create --location=$GOOGLE_CLOUD_LOCATION --project=$GOOGLE_CLOUD_PROJECT
+
+# Create Cloud Tasks Queue
+setup-cloud-tasks:
+  gcloud tasks queues create $TASKS_QUEUE_NAME \
+    --location=$GOOGLE_CLOUD_LOCATION \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# Create Artifact Registry Repository and configure Docker
+setup-artifact-registry:
+  gcloud artifacts repositories create prod \
+    --repository-format=docker \
+    --location=$GOOGLE_CLOUD_LOCATION \
+    --project=$GOOGLE_CLOUD_PROJECT
+  gcloud auth configure-docker $GOOGLE_CLOUD_LOCATION-docker.pkg.dev
+
+# Enable BigQuery API (for gnomAD)
+enable-bigquery-api:
+  gcloud services enable bigquery.googleapis.com --project=$GOOGLE_CLOUD_PROJECT
+
+# Create GCS bucket for Shared VCF
+create-shared-vcf-bucket:
+  gcloud storage buckets create gs://${SHARED_VCF_BUCKET} --project=$GOOGLE_CLOUD_PROJECT --location=$GOOGLE_CLOUD_LOCATION
+
+# --- 2. GKE Infrastructure Setup ---
+
+# Create GKE Cluster
+create-gke-cluster:
+  gcloud container clusters create genomics-cluster \
+    --zone=$GOOGLE_CLOUD_ZONE \
+    --network=$NETWORK_NAME \
+    --subnetwork=gke-nodes \
+    --enable-private-nodes \
+    --master-ipv4-cidr=172.16.0.0/28 \
+    --num-nodes=1 \
+    --machine-type=n2d-highmem-32 \
+    --workload-pool=$GOOGLE_CLOUD_PROJECT.svc.id.goog \
+    --addons GcsFuseCsiDriver \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# Get Cluster Credentials
+get-cluster-credentials:
+  gcloud container clusters get-credentials genomics-cluster \
+    --zone=$GOOGLE_CLOUD_ZONE \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# Create Kubernetes Service Account for the agent
+create-k8s-service-account:
+  kubectl create serviceaccount genomics-agent-ksa
+  kubectl annotate serviceaccount genomics-agent-ksa \
+    iam.gke.io/gcp-service-account=firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com
+
+# Set Up Workload Identity Binding
+setup-workload-identity:
+  gcloud iam service-accounts add-iam-policy-binding \
+    firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com \
+    --role=roles/iam.workloadIdentityUser \
+    --member="serviceAccount:$GOOGLE_CLOUD_PROJECT.svc.id.goog[default/genomics-agent-ksa]" \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# Grant Required IAM Permissions
+grant-iam-permissions:
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/bigquery.dataViewer"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/bigquery.jobUser"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/cloudtasks.enqueuer"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/datastore.user"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/iam.serviceAccountTokenCreator"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/iam.serviceAccountUser"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/iap.httpsResourceAccessor"
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:firebase-adminsdk-fbsvc@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/storage.objectUser"
+
+# --- 3. VEP Cache Setup (one-time) ---
+
+# Create GCS bucket for VEP cache
+create-vep-bucket:
+  gcloud storage buckets create gs://${GOOGLE_CLOUD_PROJECT}_vep-cache-bucket --project=$GOOGLE_CLOUD_PROJECT --location=$GOOGLE_CLOUD_LOCATION
+
+# Download VEP cache and upload to GCS (Takes significant time)
+download-vep-cache:
+  mkdir -p ~/vep_cache_data
+  cd ~/vep_cache_data && \
+    wget https://ftp.ensembl.org/pub/release-113/variation/indexed_vep_cache/homo_sapiens_vep_113_GRCh38.tar.gz && \
+    tar -xzvf homo_sapiens_vep_113_GRCh38.tar.gz && \
+    gsutil -m cp -r homo_sapiens gs://${GOOGLE_CLOUD_PROJECT}_vep-cache-bucket/
+
+# Create Persistent Disk for VEP Cache
+create-vep-disk:
+  gcloud compute disks create vep-cache-disk --size=100GB --zone=$GOOGLE_CLOUD_ZONE --project=$GOOGLE_CLOUD_PROJECT
+
+# Create temporary VM to load the cache data
+create-cache-loader-vm:
+  gcloud compute instances create cache-loader --zone=$GOOGLE_CLOUD_ZONE --disk=name=vep-cache-disk,mode=rw --project=$GOOGLE_CLOUD_PROJECT
+
+# SSH into the temporary VM to load the cache data (Manual steps required inside VM)
+ssh-cache-loader-vm:
+  @echo "Run these commands inside the VM:"
+  @echo "sudo mkfs.ext4 /dev/sdb"
+  @echo "sudo mkdir -p /mnt/cache/homo_sapiens"
+  @echo "sudo mount /dev/sdb /mnt/cache"
+  @echo "sudo chmod 777 /mnt/cache/homo_sapiens"
+  @echo "gsutil -m cp -r gs://${GOOGLE_CLOUD_PROJECT}_vep-cache-bucket/homo_sapiens/113_GRCh38 /mnt/cache/homo_sapiens/"
+  @echo "exit"
+  gcloud compute ssh cache-loader --zone=$GOOGLE_CLOUD_ZONE
+
+# Delete the temporary VM
+delete-cache-loader-vm:
+  gcloud compute instances delete cache-loader --zone=$GOOGLE_CLOUD_ZONE --quiet
+
+# --- 4. Application Setup ---
+
+# Create Kubernetes Secret for Gemini API Key
+create-gemini-secret:
+  kubectl create secret generic gemini-api-key-secret --from-literal=key=$GEMINI_API_KEY
+
+# --- 5. Security & IAP Setup ---
+
+# Enable Identity-Aware Proxy (IAP) API
+enable-iap:
+  gcloud services enable iap.googleapis.com --project=$GOOGLE_CLOUD_PROJECT
+
+# Create Cloud Armor security policy
+setup-cloud-armor:
+  gcloud compute security-policies create genomics-security-policy \
+    --description "Policy for genomics-ui and agent"
+  gcloud compute security-policies rules update 2147483647 \
+    --security-policy genomics-security-policy \
+    --action "allow"
+
+# Create Kubernetes Secret for IAP OAuth
+setup-iap-secret:
+  kubectl create secret generic iap-oauth-secret \
+    --from-literal=client_id=$IAP_CLIENT_ID \
+    --from-literal=client_secret=$IAP_CLIENT_SECRET
+
+# Grant a user access to bypass IAP (Usage: just grant-iap-access user@example.com)
+grant-iap-access user_email:
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="user:{{user_email}}" \
+    --role="roles/iap.httpsResourceAccessor"
+
+# --- 6. Vertex AI Reasoning Engine Setup ---
+
+# Enable Vertex AI and set up IAM roles
+setup-vertex-ai:
+  gcloud services enable aiplatform.googleapis.com
+  gcloud beta services identity create --service=aiplatform.googleapis.com --project=$GOOGLE_CLOUD_PROJECT
+  gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:$REASONING_ENGINE_SA" \
+    --role="roles/aiplatform.reasoningEngineServiceAgent"
+
+# Create the agent engine using the python script
+create_agent_engine:
+  uv run create_agent_engine.py
+
+# --- 7. Cluster Networking & Firewall Setup ---
+
+# Setup required firewall rules for the GKE cluster
+setup-cluster-firewalls:
+  #!/usr/bin/env bash
+  set -e
+  
+  echo "Getting Master CIDR..."
+  MASTER_CIDR=$(gcloud container clusters describe genomics-cluster --zone=$GOOGLE_CLOUD_ZONE --format="value(privateClusterConfig.masterIpv4CidrBlock)")
+  echo "Master CIDR: $MASTER_CIDR"
+  
+  echo "Getting Node Tag..."
+  NODE_TAG=$(gcloud compute instances list --filter="name~gke-genomics-cluster" --limit=1 --format="value(tags.items[0])")
+  echo "Node Tag: $NODE_TAG"
+  
+  echo "Setting up Master to Nodes firewall rule..."
+  gcloud compute firewall-rules create gke-genomics-master-to-nodes-fix \
+    --network $NETWORK_NAME \
+    --priority 1000 \
+    --direction INGRESS \
+    --action ALLOW \
+    --source-ranges=$MASTER_CIDR \
+    --target-tags=$NODE_TAG \
+    --rules tcp:10250,tcp:443 || \
+  gcloud compute firewall-rules update gke-genomics-master-to-nodes-fix \
+    --source-ranges=$MASTER_CIDR \
+    --target-tags=$NODE_TAG
+    
+  echo "Setting up GCLB and Health Checks to Nodes firewall rule..."
+  gcloud compute firewall-rules create allow-gclb-to-nodes \
+    --network $NETWORK_NAME \
+    --action ALLOW \
+    --direction INGRESS \
+    --source-ranges 130.211.0.0/22,35.191.0.0/16 \
+    --target-tags $NODE_TAG \
+    --rules tcp:3000,tcp:8080,tcp:30000-32767 \
+    --description "Allow GCLB and Health Checks to GKE Nodes" || echo "Rule might already exist."
+    
+  echo "Setting up internal bypass denial firewall rule..."
+  gcloud compute firewall-rules create deny-internal-bypass-to-agent \
+    --network $NETWORK_NAME \
+    --action DENY \
+    --direction INGRESS \
+    --priority 900 \
+    --source-ranges $MASTER_CIDR \
+    --target-tags $NODE_TAG \
+    --rules tcp:8080 || echo "Rule might already exist."
+
+# --- 8. Domain & Load Balancer Setup ---
+
+# Reserve a global static IP address
+reserve-global-ip:
+  gcloud compute addresses create my-global-ip \
+    --global \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# Create a managed SSL certificate
+create-ssl-cert:
+  gcloud compute ssl-certificates create genomics-managed-cert \
+    --domains=$PUBLIC_API_DOMAIN \
+    --global \
+    --project=$GOOGLE_CLOUD_PROJECT
+
+# --- 9. HTTPS Load Balancer Setup (Production) ---
+
+export HEALTH_CHECK_NAME := "genomics-api-health-check"
+export BACKEND_SERVICE_NAME := "genomics-gke-backend-service"
+export URL_MAP_NAME := "genomics-api-url-map"
+export HTTPS_PROXY_NAME := "genomics-api-https-proxy"
+export FORWARDING_RULE_NAME := "genomics-api-https-rule"
+export SSL_CERT_NAME := "genomics-managed-cert"
+export STATIC_IP_NAME := "my-global-ip"
+
+# Master recipe to set up the HTTPS Load Balancer
+setup-load-balancer: _get-node-port _get-instance-group create-health-check create-backend-service add-backend-to-service create-url-map create-https-proxy create-forwarding-rule
+  @echo "Load balancer setup complete. It may take a few minutes for the backend to become healthy."
+  @echo "Run 'just check-backend-health' to monitor."
+
+# Helper to get the NodePort
+_get-node-port:
+  #!/usr/bin/env bash
+  export NODE_PORT=$(kubectl get service genomics-agent-service -o=jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
+  echo "NodePort is $NODE_PORT"
+
+# Helper to get the instance group name
+_get-instance-group:
+  #!/usr/bin/env bash
+  export INSTANCE_GROUP_NAME=$(gcloud compute instance-groups list --zones=$GOOGLE_CLOUD_ZONE --format="value(name)" --filter="name~gke-genomics-cluster")
+  echo "Instance group is $INSTANCE_GROUP_NAME"
+
+# Create Health Check
+create-health-check: _get-node-port
+  gcloud compute health-checks create http {{HEALTH_CHECK_NAME}} \
+    --port=$NODE_PORT \
+    --request-path="/health" \
+    --check-interval=10s \
+    --timeout=5s \
+    --unhealthy-threshold=3 \
+    --healthy-threshold=2 \
+    --global
+
+# Create Backend Service
+create-backend-service:
+  gcloud compute backend-services create {{BACKEND_SERVICE_NAME}} \
+    --protocol=HTTP \
+    --health-checks={{HEALTH_CHECK_NAME}} \
+    --global
+
+# Add the instance group as a backend
+add-backend-to-service: _get-instance-group
+  gcloud compute backend-services add-backend {{BACKEND_SERVICE_NAME}} \
+    --instance-group=$INSTANCE_GROUP_NAME \
+    --instance-group-zone={{GOOGLE_CLOUD_ZONE}} \
+    --balancing-mode=UTILIZATION \
+    --max-utilization=0.8 \
+    --global
+
+# Create URL Map
+create-url-map:
+  gcloud compute url-maps create {{URL_MAP_NAME}} \
+    --default-service={{BACKEND_SERVICE_NAME}}
+
+# Create HTTPS Proxy
+create-https-proxy:
+  gcloud compute target-https-proxies create {{HTTPS_PROXY_NAME}} \
+    --url-map={{URL_MAP_NAME}} \
+    --ssl-certificates={{SSL_CERT_NAME}} \
+    --global
+
+# Create Forwarding Rule
+create-forwarding-rule:
+  gcloud compute forwarding-rules create {{FORWARDING_RULE_NAME}} \
+    --address={{STATIC_IP_NAME}} \
+    --target-https-proxy={{HTTPS_PROXY_NAME}} \
+    --ports=443 \
+    --global
+
+# Check backend health
+check-backend-health:
+  gcloud compute backend-services get-health {{BACKEND_SERVICE_NAME}} --global
+
+# Destroy the HTTPS Load Balancer
+destroy-load-balancer:
+  gcloud compute forwarding-rules delete {{FORWARDING_RULE_NAME}} --global --quiet
+  gcloud compute target-https-proxies delete {{HTTPS_PROXY_NAME}} --global --quiet
+  gcloud compute url-maps delete {{URL_MAP_NAME}} --quiet
+  gcloud compute backend-services delete {{BACKEND_SERVICE_NAME}} --global --quiet
+  gcloud compute health-checks delete {{HEALTH_CHECK_NAME}} --quiet
+  gcloud compute ssl-certificates delete {{SSL_CERT_NAME}} --global --quiet
+  gcloud compute addresses delete {{STATIC_IP_NAME}} --global --quiet

@@ -1,0 +1,31 @@
+# This file specifies files and directories that should be 
+# ignored when uploading source code to Google Cloud Build.
+
+# Git and metadata
+.git
+.gitignore
+.gcloudignore
+
+# Local dependencies (Docker will install these fresh in the cloud)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs (Docker should generate these fresh)
+.next/
+out/
+build/
+dist/
+
+# Environment secrets (DO NOT upload these)
+.env
+.env.local
+.env.production
+.env*.local
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Optional: Docker files that aren't needed for the build itself
+docker-compose.yml

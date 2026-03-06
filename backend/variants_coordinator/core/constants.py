@@ -6,5 +6,5 @@ ACMG_CLASSIFICATIONS = {
     "LIKELY_PATHOGENIC": "Likely pathogenic",
     "VUS": "Uncertain significance",
     "LIKELY_BENIGN": "Likely benign",
-    "BENIGN": "Benign"
+    "BENIGN": "Benign",
 }

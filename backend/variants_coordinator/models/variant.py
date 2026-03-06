@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class Variant(BaseModel):
     """Represents a genomic variant."""
+
     chrom: str = Field(..., description="Chromosome")
     pos: int = Field(..., description="Position (1-based)")
     ref: str = Field(..., description="Reference allele")
@@ -20,7 +21,9 @@ class Variant(BaseModel):
     genotype_quality: Optional[float] = Field(None, description="Genotype quality")
     info: Dict[str, Any] = Field(default_factory=dict, description="INFO field data")
     variant_id: Optional[str] = Field(None, description="Variant identifier")
-    variant_type: Optional[str] = Field(None, description="Type of variant (SNV, INDEL, etc)")
+    variant_type: Optional[str] = Field(
+        None, description="Type of variant (SNV, INDEL, etc)"
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -35,8 +38,11 @@ class Variant(BaseModel):
 
 class VariantAnnotation(BaseModel):
     """Variant annotation from external sources."""
+
     variant_id: str
-    source: str = Field(..., description="Annotation source (ClinVar, gnomAD, AlphaMissense, etc)")
+    source: str = Field(
+        ..., description="Annotation source (ClinVar, gnomAD, AlphaMissense, etc)"
+    )
     clinical_significance: Optional[str] = None
     review_status: Optional[str] = None
     condition: Optional[List[str]] = None
@@ -52,18 +58,20 @@ class VariantAnnotation(BaseModel):
     # AlphaMissense fields
     am_pathogenicity: Optional[float] = Field(
         None,
-        description="AlphaMissense pathogenicity score (0-1). >0.564 = likely pathogenic, <0.34 = likely benign"
+        description="AlphaMissense pathogenicity score (0-1). >0.564 = likely pathogenic, <0.34 = likely benign",
     )
     am_class: Optional[str] = Field(
         None,
-        description="AlphaMissense classification: likely_pathogenic, likely_benign, or ambiguous"
+        description="AlphaMissense classification: likely_pathogenic, likely_benign, or ambiguous",
     )
 
 
 def serialize_data_to_artifact(data: Any) -> Part:
     """Serialize any Python object into an ADK Part for artifact storage using pickle."""
     data_bytes = pickle.dumps(data)
-    return Part(inline_data=Blob(mime_type="application/python-pickle", data=data_bytes))
+    return Part(
+        inline_data=Blob(mime_type="application/python-pickle", data=data_bytes)
+    )
 
 
 def deserialize_data_from_artifact(artifact: Part) -> Any:

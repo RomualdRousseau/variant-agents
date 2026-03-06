@@ -12,13 +12,13 @@ from .tools.analysis_tools import (
     report_generation_tool,
     report_status_tool,
     query_gene_tool,
-    novel_am_candidates_tool
+    novel_am_candidates_tool,
 )
 
 from .tools.visualization_tools import (
     generate_chart_tool,
     compare_populations_tool_instance,
-    filter_category_tool
+    filter_category_tool,
 )
 
 # Set up logging
@@ -85,7 +85,7 @@ intake_agent = LlmAgent(
     - Always report the artifact name from the tool response
     - You MUST use set_analysis_mode tool before vcf_intake_tool""",
     tools=[set_mode_tool, vcf_intake_tool],
-    output_key="intake_status"
+    output_key="intake_status",
 )
 
 vep_start_agent = LlmAgent(
@@ -104,14 +104,14 @@ vep_start_agent = LlmAgent(
     The tool will return a task ID that must be communicated to the user.
     The task ID is stored in state['vep_task_id'] for tracking.""",
     tools=[vep_annotation_tool],
-    output_key="vep_task_info"
+    output_key="vep_task_info",
 )
 
 # Sequential pipeline for initialization
 initiation_pipeline = SequentialAgent(
     name="InitiationPipeline",
     description="Handles VCF parsing and VEP job submission",
-    sub_agents=[intake_agent, vep_start_agent]
+    sub_agents=[intake_agent, vep_start_agent],
 )
 
 
@@ -119,12 +119,19 @@ initiation_pipeline = SequentialAgent(
 # PHASE 2: COMPLETION PIPELINE - Checks VEP status and starts report generation
 # ============================================================================
 
-def check_vep_prerequisites(callback_context: CallbackContext) -> Optional[types.Content]:
+
+def check_vep_prerequisites(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
     """Callback to check if VEP task exists before running check agent"""
-    if not callback_context.state.get('vep_task_id'):
+    if not callback_context.state.get("vep_task_id"):
         return types.Content(
             role="model",
-            parts=[types.Part(text="No VEP task found. Please provide a VCF file first to start analysis.")]
+            parts=[
+                types.Part(
+                    text="No VEP task found. Please provide a VCF file first to start analysis."
+                )
+            ],
         )
     return None
 
@@ -152,20 +159,22 @@ vep_check_agent = LlmAgent(
     The tool will set appropriate state flags to control pipeline flow.""",
     tools=[vep_status_tool],
     output_key="vep_status_result",
-    before_agent_callback=check_vep_prerequisites
+    before_agent_callback=check_vep_prerequisites,
 )
 
 
-def check_report_prerequisites(callback_context: CallbackContext) -> Optional[types.Content]:
+def check_report_prerequisites(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
     """Callback to ensure VEP is complete before starting report generation"""
-    if not callback_context.state.get('vep_completed'):
+    if not callback_context.state.get("vep_completed"):
         logger.info("Skipping report generation - VEP not complete")
         return types.Content(
             role="model",
-            parts=[types.Part(text="")]  # Empty message to skip silently
+            parts=[types.Part(text="")],  # Empty message to skip silently
         )
     # Detect analysis mode from state
-    analysis_mode = callback_context.state.get('analysis_mode', 'clinical')
+    analysis_mode = callback_context.state.get("analysis_mode", "clinical")
     logger.info(f"Report generation will proceed in {analysis_mode} mode")
     return None
 
@@ -219,14 +228,14 @@ report_start_agent = LlmAgent(
     The task ID is stored in state['report_task_id'] for tracking.""",
     tools=[report_generation_tool],
     output_key="report_task_info",
-    before_agent_callback=check_report_prerequisites
+    before_agent_callback=check_report_prerequisites,
 )
 
 # Sequential pipeline for completion
 completion_pipeline = SequentialAgent(
     name="CompletionPipeline",
     description="Checks VEP status and initiates report generation",
-    sub_agents=[vep_check_agent, report_start_agent]
+    sub_agents=[vep_check_agent, report_start_agent],
 )
 
 
@@ -234,19 +243,29 @@ completion_pipeline = SequentialAgent(
 # PHASE 3: REPORT RETRIEVAL PIPELINE - Checks and retrieves final report
 # ============================================================================
 
-def check_report_task_prerequisites(callback_context: CallbackContext) -> Optional[types.Content]:
+
+def check_report_task_prerequisites(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
     """Callback to check if report task exists"""
-    if not callback_context.state.get('report_task_id'):
+    if not callback_context.state.get("report_task_id"):
         # Check if VEP is at least complete
-        if callback_context.state.get('vep_completed'):
+        if callback_context.state.get("vep_completed"):
             return types.Content(
                 role="model",
-                parts=[types.Part(
-                    text="VEP is complete but report generation hasn't started. Please wait a moment and try again.")]
+                parts=[
+                    types.Part(
+                        text="VEP is complete but report generation hasn't started. Please wait a moment and try again."
+                    )
+                ],
             )
         return types.Content(
             role="model",
-            parts=[types.Part(text="No report generation task found. Please complete the VEP analysis first.")]
+            parts=[
+                types.Part(
+                    text="No report generation task found. Please complete the VEP analysis first."
+                )
+            ],
         )
     return None
 
@@ -289,14 +308,14 @@ report_check_agent = LlmAgent(
     - Note which analysis mode was used""",
     tools=[report_status_tool],
     output_key="report_status",
-    before_agent_callback=check_report_task_prerequisites
+    before_agent_callback=check_report_task_prerequisites,
 )
 
 # Pipeline for report retrieval
 report_pipeline = SequentialAgent(
     name="ReportPipeline",
     description="Retrieves and presents the final clinical report",
-    sub_agents=[report_check_agent]
+    sub_agents=[report_check_agent],
 )
 
 
@@ -304,13 +323,19 @@ report_pipeline = SequentialAgent(
 # PHASE 4: QUERY AGENT - Handles specific variant/gene queries AND visualizations
 # ============================================================================
 
-def check_query_prerequisites(callback_context: CallbackContext) -> Optional[types.Content]:
+
+def check_query_prerequisites(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
     """Callback to ensure annotations are available for queries"""
-    if not callback_context.state.get('annotations_artifact_name'):
+    if not callback_context.state.get("annotations_artifact_name"):
         return types.Content(
             role="model",
-            parts=[types.Part(
-                text="The analysis must be complete before querying specific genes or generating visualizations. Please wait for the report to finish generating.")]
+            parts=[
+                types.Part(
+                    text="The analysis must be complete before querying specific genes or generating visualizations. Please wait for the report to finish generating."
+                )
+            ],
         )
     return None
 
@@ -540,10 +565,10 @@ query_agent = LlmAgent(
         novel_am_candidates_tool,
         generate_chart_tool,
         compare_populations_tool_instance,
-        filter_category_tool
+        filter_category_tool,
     ],
     output_key="query_result",
-    before_agent_callback=check_query_prerequisites
+    before_agent_callback=check_query_prerequisites,
 )
 
 # ============================================================================
@@ -675,5 +700,5 @@ If user asks to change mode after analysis started:
 - Explain that mode is set at the beginning
 - They would need to restart the analysis with desired mode
 - Current analysis will continue in the mode it started with""",
-    sub_agents=[initiation_pipeline, completion_pipeline, report_pipeline, query_agent]
+    sub_agents=[initiation_pipeline, completion_pipeline, report_pipeline, query_agent],
 )

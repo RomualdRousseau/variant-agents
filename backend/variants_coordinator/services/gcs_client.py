@@ -25,7 +25,9 @@ class GCSClient:
             if settings.demo_mode:
                 logger.info("Demo mode is enabled, will use mock data as a fallback.")
             else:
-                raise GCSAccessError("GCS client failed to initialize outside of demo mode.")
+                raise GCSAccessError(
+                    "GCS client failed to initialize outside of demo mode."
+                )
 
     def _parse_gcs_path(self, gcs_path: str) -> tuple[str, str]:
         """Parse GCS path into bucket and blob name."""
@@ -38,7 +40,7 @@ class GCSClient:
 
     def read_vcf(self, gcs_path: str) -> str:
         """Read VCF file content from GCS, with decompression if needed."""
-        logger.info(f"Attempting to read VCF from GCS", gcs_path=gcs_path)
+        logger.info("Attempting to read VCF from GCS", gcs_path=gcs_path)
 
         if not self.client:
             raise GCSAccessError("GCS client is not available.")
@@ -49,17 +51,22 @@ class GCSClient:
             blob = bucket.blob(blob_name)
 
             content_bytes = blob.download_as_bytes()
-            logger.info(f"Successfully downloaded VCF file from GCS.", size_bytes=len(content_bytes))
+            logger.info(
+                "Successfully downloaded VCF file from GCS.",
+                size_bytes=len(content_bytes),
+            )
 
             if gcs_path.endswith(".gz"):
                 decompressed_content = gzip.decompress(content_bytes)
-                return decompressed_content.decode('utf-8')
+                return decompressed_content.decode("utf-8")
             else:
-                return content_bytes.decode('utf-8')
+                return content_bytes.decode("utf-8")
 
         except NotFound:
-            logger.error(f"File not found in GCS", gcs_path=gcs_path)
+            logger.error("File not found in GCS", gcs_path=gcs_path)
             raise GCSAccessError(f"File not found at GCS path: {gcs_path}")
         except Exception as e:
             logger.exception("Error reading VCF file from GCS.")
-            raise GCSAccessError(f"An unexpected error occurred while reading from GCS: {e}")
+            raise GCSAccessError(
+                f"An unexpected error occurred while reading from GCS: {e}"
+            )

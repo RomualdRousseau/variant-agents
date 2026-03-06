@@ -31,31 +31,40 @@ class LocalClinVarService:
 
         self._load_attempted = True
         if not os.path.exists(self.clinvar_path):
-            logger.warning(f"Local ClinVar file not found, API will be used.", path=self.clinvar_path)
+            logger.warning(
+                "Local ClinVar file not found, API will be used.",
+                path=self.clinvar_path,
+            )
             return
 
         logger.info("Loading local ClinVar database into memory...")
         try:
-            with gzip.open(self.clinvar_path, 'rt') as f:
+            with gzip.open(self.clinvar_path, "rt") as f:
                 for line in f:
-                    if line.startswith('#'):
+                    if line.startswith("#"):
                         continue
-                    fields = line.strip().split('\t')
+                    fields = line.strip().split("\t")
                     chrom, pos, _, ref, alts, _, _, info = fields[:8]
 
-                    info_dict = {i.split('=', 1)[0]: i.split('=', 1)[1] for i in info.split(';') if '=' in i}
-                    clnsig = self._parse_clnsig(info_dict.get('CLNSIG', ''))
-                    gene = info_dict.get('GENEINFO', ':').split(':')[0]
+                    info_dict = {
+                        i.split("=", 1)[0]: i.split("=", 1)[1]
+                        for i in info.split(";")
+                        if "=" in i
+                    }
+                    clnsig = self._parse_clnsig(info_dict.get("CLNSIG", ""))
+                    gene = info_dict.get("GENEINFO", ":").split(":")[0]
 
-                    for alt in alts.split(','):
+                    for alt in alts.split(","):
                         key = f"{chrom.replace('chr', '')}:{pos}:{ref}>{alt}"
                         self.clinvar_index[key] = {
-                            'clinical_significance': clnsig,
-                            'gene_symbol': gene if gene else None
+                            "clinical_significance": clnsig,
+                            "gene_symbol": gene if gene else None,
                         }
             self._loaded = True
-            logger.info(f"Successfully loaded {len(self.clinvar_index)} variants from local ClinVar.")
-        except Exception as e:
+            logger.info(
+                f"Successfully loaded {len(self.clinvar_index)} variants from local ClinVar."
+            )
+        except Exception:
             logger.exception("Error loading local ClinVar database.")
 
     def _parse_clnsig(self, clnsig: str) -> str:
@@ -69,7 +78,9 @@ class LocalClinVarService:
             return "Uncertain_significance"
         return "Not provided"
 
-    async def batch_annotate(self, variants: List[Variant]) -> Dict[str, VariantAnnotation]:
+    async def batch_annotate(
+        self, variants: List[Variant]
+    ) -> Dict[str, VariantAnnotation]:
         """Annotate multiple variants using the local index."""
         if not self.is_loaded():
             return {}
@@ -80,8 +91,6 @@ class LocalClinVarService:
             if key in self.clinvar_index:
                 data = self.clinvar_index[key]
                 annotations[variant.variant_id] = VariantAnnotation(
-                    variant_id=variant.variant_id,
-                    source="ClinVar_Local",
-                    **data
+                    variant_id=variant.variant_id, source="ClinVar_Local", **data
                 )
         return annotations

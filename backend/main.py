@@ -2,16 +2,18 @@
 Main FastAPI application entry point.
 This app serves both the ADK agent API and the background worker endpoints.
 """
-import structlog
+
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+
+import structlog
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from variants_coordinator.core.initialization import initialize_clients_and_runner
-from variants_coordinator.routes.auth_router import router as auth_api_router
-from variants_coordinator.routes.agent_router import router as agent_api_router
-from variants_coordinator.routes.worker_router import router as worker_api_router
 from variants_coordinator.core.config import settings
+from variants_coordinator.core.initialization import initialize_clients_and_runner
+from variants_coordinator.routes.agent_router import router as agent_api_router
+from variants_coordinator.routes.auth_router import router as auth_api_router
+from variants_coordinator.routes.worker_router import router as worker_api_router
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +41,7 @@ app = FastAPI(
     title="Genomic Variant Analysis Agent API",
     description="A multi-agent system for genomic analysis.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Middleware
@@ -50,15 +52,12 @@ if settings.demo_mode or settings.log_level == "DEBUG":
 else:
     # Production mode - restrict to specific origins
     cors_origins = [
-        "http://localhost:3000",  # Local development
-        "http://localhost:3001",  # Alternative local port
-        "https://variant-intake-agents.firebaseapp.com",  # Firebase hosting
-        "https://variant-intake-agents.web.app",  # Alternative Firebase domain
+        origin.strip() for origin in settings.cors_production_origins.split(",")
     ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -66,9 +65,16 @@ app.add_middleware(
 )
 
 # API Routers
-app.include_router(auth_api_router, tags=["Auth"])
-app.include_router(agent_api_router, tags=["Agent"])
-app.include_router(worker_api_router, tags=["Worker"])
+if settings.public_api_prefix:
+    api_router = APIRouter(prefix=settings.public_api_prefix)
+    api_router.include_router(auth_api_router, tags=["Auth"])
+    api_router.include_router(agent_api_router, tags=["Agent"])
+    api_router.include_router(worker_api_router, tags=["Worker"])
+    app.include_router(api_router)
+else:
+    app.include_router(auth_api_router, tags=["Auth"])
+    app.include_router(agent_api_router, tags=["Agent"])
+    app.include_router(worker_api_router, tags=["Worker"])
 
 
 # Root Endpoint
@@ -78,7 +84,7 @@ async def root():
     return {
         "message": "Genomic Variant Analysis Agent API is running.",
         "version": "1.0.0",
-        "authentication": "Firebase Auth enabled"
+        "authentication": "Firebase Auth enabled",
     }
 
 
@@ -88,7 +94,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "genomic-variant-analysis",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
@@ -101,5 +107,5 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=True,
-        log_level=settings.log_level.lower()
+        log_level=settings.log_level.lower(),
     )

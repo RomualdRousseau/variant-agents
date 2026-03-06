@@ -1,0 +1,29 @@
+set dotenv-load
+
+# Default is this help
+default: help
+
+# Print the available recipes
+help:
+    @just --justfile {{justfile()}} --list
+
+# Build the frontend docker image and push it to Google Artifact Registry
+build:
+  gcloud builds submit --tag=$GOOGLE_CLOUD_LOCATION-docker.pkg.dev/$GOOGLE_CLOUD_PROJECT/prod/genomics-ui:latest
+
+# Deploy the frontend to GKE and restart the deployment
+deploy:
+  envsubst < gke/genomics-deployment.yaml | kubectl apply -f -
+  kubectl rollout restart deployment/genomics-ui
+
+# View the status of frontend pods in Kubernetes
+status:
+  kubectl get pods -l app=genomics-ui
+
+# Tail the latest 25 log lines from the frontend pods
+logs:
+  kubectl logs -l app=genomics-ui --tail=25
+
+# Port-forward the frontend deployment to localhost:8080 (container port 80)
+start:
+  kubectl port-forward deployment/genomics-ui 8080:80

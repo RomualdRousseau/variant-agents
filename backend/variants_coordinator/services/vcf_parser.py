@@ -63,10 +63,10 @@ class VCFParser:
                 filter=fields[6].split(";") if fields[6] != "." else ["PASS"],
                 info=info,
                 genotype=genotype,
-                genotype_quality=genotype_quality
+                genotype_quality=genotype_quality,
             )
         except (ValueError, IndexError) as e:
-            logger.error(f"Error parsing variant line", line=line, error=str(e))
+            logger.error("Error parsing variant line", line=line, error=str(e))
             return None
 
     def parse_vcf_content(self, content: str) -> Generator[Variant, None, None]:
@@ -84,17 +84,34 @@ class VCFParser:
     def get_summary_stats(self, variants: List[Variant]) -> Dict[str, Any]:
         """Get summary statistics for a list of variants."""
         stats = {
-            "total_variants": len(variants), "variant_types": {}, "chromosomes": {},
-            "quality_distribution": {"high_quality": 0, "medium_quality": 0, "low_quality": 0, "no_quality": 0},
-            "filter_status": {"PASS": 0, "filtered": 0}
+            "total_variants": len(variants),
+            "variant_types": {},
+            "chromosomes": {},
+            "quality_distribution": {
+                "high_quality": 0,
+                "medium_quality": 0,
+                "low_quality": 0,
+                "no_quality": 0,
+            },
+            "filter_status": {"PASS": 0, "filtered": 0},
         }
         for variant in variants:
-            stats["variant_types"][variant.variant_type] = stats["variant_types"].get(variant.variant_type, 0) + 1
-            stats["chromosomes"][variant.chrom] = stats["chromosomes"].get(variant.chrom, 0) + 1
-            if variant.qual is None: stats["quality_distribution"]["no_quality"] += 1
-            elif variant.qual > 30: stats["quality_distribution"]["high_quality"] += 1
-            elif variant.qual >= 10: stats["quality_distribution"]["medium_quality"] += 1
-            else: stats["quality_distribution"]["low_quality"] += 1
-            if "PASS" in variant.filter: stats["filter_status"]["PASS"] += 1
-            else: stats["filter_status"]["filtered"] += 1
+            stats["variant_types"][variant.variant_type] = (
+                stats["variant_types"].get(variant.variant_type, 0) + 1
+            )
+            stats["chromosomes"][variant.chrom] = (
+                stats["chromosomes"].get(variant.chrom, 0) + 1
+            )
+            if variant.qual is None:
+                stats["quality_distribution"]["no_quality"] += 1
+            elif variant.qual > 30:
+                stats["quality_distribution"]["high_quality"] += 1
+            elif variant.qual >= 10:
+                stats["quality_distribution"]["medium_quality"] += 1
+            else:
+                stats["quality_distribution"]["low_quality"] += 1
+            if "PASS" in variant.filter:
+                stats["filter_status"]["PASS"] += 1
+            else:
+                stats["filter_status"]["filtered"] += 1
         return stats

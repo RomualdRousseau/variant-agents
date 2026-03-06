@@ -2,6 +2,7 @@
 SSE event enhancement utilities.
 Adds metadata and progress information to ADK events.
 """
+
 import time
 from typing import Dict, Any, Optional
 from google.adk.events import Event
@@ -17,7 +18,9 @@ class SSEEventEnhancer:
         self.session_id = session_id
         self.user_id = user_id
         self.firebase_uid = firebase_uid
-        self.metadata_service = SessionMetadataService(clients.db) if clients.db else None
+        self.metadata_service = (
+            SessionMetadataService(clients.db) if clients.db else None
+        )
         self._last_metadata_update = 0
         self._metadata_cache = None
         self._metadata_update_interval = 5  # Seconds between metadata refreshes
@@ -36,8 +39,8 @@ class SSEEventEnhancer:
                 "timestamp": time.time(),
                 "session": None,  # Pre-declare the session field
                 "event_type": None,  # Pre-declare event_type
-                "progress": None  # Pre-declare progress
-            }
+                "progress": None,  # Pre-declare progress
+            },
         }
 
         # Add session metadata (with caching to avoid too many DB calls)
@@ -48,7 +51,7 @@ class SSEEventEnhancer:
                 "vep_status": session_metadata.get("vep_status"),
                 "vep_task_id": session_metadata.get("vep_task_id"),
                 "variant_count": session_metadata.get("variant_count"),
-                "pathogenic_count": session_metadata.get("pathogenic_count")
+                "pathogenic_count": session_metadata.get("pathogenic_count"),
             }
 
         # Detect and flag specific event types for UI
@@ -66,10 +69,15 @@ class SSEEventEnhancer:
             return None
 
         current_time = time.time()
-        if (not self._metadata_cache or
-                current_time - self._last_metadata_update > self._metadata_update_interval):
+        if (
+            not self._metadata_cache
+            or current_time - self._last_metadata_update
+            > self._metadata_update_interval
+        ):
             try:
-                self._metadata_cache = await self.metadata_service.get_metadata(self.session_id)
+                self._metadata_cache = await self.metadata_service.get_metadata(
+                    self.session_id
+                )
                 self._last_metadata_update = current_time
             except Exception:
                 # Don't break the stream if metadata fetch fails
@@ -82,12 +90,12 @@ class SSEEventEnhancer:
         # Check for VEP-related events
         if event.content and event.content.parts:
             for part in event.content.parts:
-                if hasattr(part, 'function_call') and part.function_call:
+                if hasattr(part, "function_call") and part.function_call:
                     if part.function_call.name == "start_vep_annotation":
                         return "vep_started"
                     elif part.function_call.name == "check_vep_status":
                         return "vep_status_check"
-                elif hasattr(part, 'function_response') and part.function_response:
+                elif hasattr(part, "function_response") and part.function_response:
                     if part.function_response.name == "start_vep_annotation":
                         return "vep_start_response"
                     elif part.function_response.name == "check_vep_status":
@@ -142,7 +150,7 @@ class SSEEventEnhancer:
                 return {
                     "status": status,
                     "estimated_progress": estimated_progress,
-                    "message": self._get_progress_message(status, estimated_progress)
+                    "message": self._get_progress_message(status, estimated_progress),
                 }
         except Exception:
             # Don't break the stream if progress check fails

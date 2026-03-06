@@ -1,6 +1,7 @@
 """
 API routes for interacting with the ADK agent.
 """
+
 import uuid
 import re
 from typing import Optional, Dict, Any
@@ -28,7 +29,9 @@ class RunRequest(BaseModel):
     analysis_mode: Optional[str] = None
 
 
-async def event_stream_generator(event_stream, session_id: str, user_id: str, firebase_uid: str):
+async def event_stream_generator(
+    event_stream, session_id: str, user_id: str, firebase_uid: str
+):
     """Enhanced generator that yields enriched ADK events as server-sent events."""
     enhancer = SSEEventEnhancer(session_id, user_id, firebase_uid)
 
@@ -38,37 +41,38 @@ async def event_stream_generator(event_stream, session_id: str, user_id: str, fi
 
         # Yield as SSE format
         import json
+
         yield f"data: {json.dumps(enhanced_event)}\n\n"
 
 
 @router.post("/run")
 async def run_agent(
-        request: RunRequest,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    request: RunRequest, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Receives a user prompt and streams the ADK agent's events back.
     """
     if not adk.runner:
-        raise RuntimeError("ADK Runner has not been initialized. Check application startup logs.")
+        raise RuntimeError(
+            "ADK Runner has not been initialized. Check application startup logs."
+        )
 
     firebase_uid = current_user.get("uid")
     user_id = map_firebase_to_adk_user(firebase_uid)
     app_name = adk.runner.app_name
 
     # Validate analysis mode if provided
-    if request.analysis_mode and request.analysis_mode not in ['clinical', 'research']:
+    if request.analysis_mode and request.analysis_mode not in ["clinical", "research"]:
         raise HTTPException(
             status_code=400,
-            detail="Invalid analysis_mode. Must be 'clinical' or 'research'"
+            detail="Invalid analysis_mode. Must be 'clinical' or 'research'",
         )
 
     # For new sessions, we need to create first
     if not request.session_id or not request.session_id.strip():
         # Create a new session - VertexAI will generate the ID
         session = await adk.runner.session_service.create_session(
-            app_name=app_name,
-            user_id=user_id
+            app_name=app_name, user_id=user_id
         )
         session_id = session.id  # Get the generated ID
         is_new_session = True
@@ -77,12 +81,10 @@ async def run_agent(
         session_id = request.session_id
         try:
             session = await adk.runner.session_service.get_session(
-                app_name=app_name,
-                user_id=user_id,
-                session_id=session_id
+                app_name=app_name, user_id=user_id, session_id=session_id
             )
             is_new_session = False
-        except:
+        except:  # noqa: E722
             # Session doesn't exist, create it with this ID
             session = await adk.runner.session_service.create_session(
                 app_name=app_name,
@@ -94,28 +96,30 @@ async def run_agent(
     if is_new_session:
         # Create initial state event with user context
         initial_state_delta = {
-            'session:id': session.id,
-            'session:user_id': user_id,
-            'session:app_name': app_name,
-            'user:firebase_uid': firebase_uid,
-            'user:email': current_user.get('email', ''),
-            'user:display_name': current_user.get('name', ''),
+            "session:id": session.id,
+            "session:user_id": user_id,
+            "session:app_name": app_name,
+            "user:firebase_uid": firebase_uid,
+            "user:email": current_user.get("email", ""),
+            "user:display_name": current_user.get("name", ""),
             # Analysis preferences (user-scoped)
-            'user:preferred_output_format': 'detailed',
-            'user:notification_enabled': True,
+            "user:preferred_output_format": "detailed",
+            "user:notification_enabled": True,
         }
 
         # Add analysis mode to initial state if provided
         if request.analysis_mode:
-            initial_state_delta['analysis_mode'] = request.analysis_mode
+            initial_state_delta["analysis_mode"] = request.analysis_mode
 
         # Create a simple event whose only job is to carry the state update
         setup_event = Event(
             author="system",
             invocation_id=str(uuid.uuid4()),
-            actions=EventActions(state_delta=initial_state_delta)
+            actions=EventActions(state_delta=initial_state_delta),
         )
-        await adk.runner.session_service.append_event(session=session, event=setup_event)
+        await adk.runner.session_service.append_event(
+            session=session, event=setup_event
+        )
 
         # Create Firestore metadata for new session
         metadata_service = SessionMetadataService(clients.db)
@@ -123,7 +127,7 @@ async def run_agent(
         # Extract VCF path if present
         vcf_path = None
         if "gs://" in request.input_text:
-            vcf_match = re.search(r'(gs://[^\s]+\.vcf(?:\.gz)?)', request.input_text)
+            vcf_match = re.search(r"(gs://[^\s]+\.vcf(?:\.gz)?)", request.input_text)
             if vcf_match:
                 vcf_path = vcf_match.group(1)
 
@@ -131,7 +135,7 @@ async def run_agent(
         metadata_kwargs = {
             "session_id": session.id,
             "firebase_uid": firebase_uid,
-            "vcf_path": vcf_path
+            "vcf_path": vcf_path,
         }
         if request.analysis_mode:
             metadata_kwargs["analysis_mode"] = request.analysis_mode
@@ -145,22 +149,23 @@ async def run_agent(
             mode_update_event = Event(
                 author="system",
                 invocation_id=str(uuid.uuid4()),
-                actions=EventActions(state_delta={'analysis_mode': request.analysis_mode})
+                actions=EventActions(
+                    state_delta={"analysis_mode": request.analysis_mode}
+                ),
             )
-            await adk.runner.session_service.append_event(session=session, event=mode_update_event)
+            await adk.runner.session_service.append_event(
+                session=session, event=mode_update_event
+            )
 
             # Update metadata
             metadata_service = SessionMetadataService(clients.db)
             await metadata_service.update_metadata(
-                session_id=session.id,
-                analysis_mode=request.analysis_mode
+                session_id=session.id, analysis_mode=request.analysis_mode
             )
 
     user_message = Content(parts=[Part(text=request.input_text)], role="user")
     event_stream = adk.runner.run_async(
-        user_id=user_id,
-        session_id=session.id,
-        new_message=user_message
+        user_id=user_id, session_id=session.id, new_message=user_message
     )
 
     return StreamingResponse(
@@ -170,24 +175,22 @@ async def run_agent(
             "X-Session-ID": session.id,
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-        }
+        },
     )
 
 
 @router.get("/sessions")
 async def list_sessions(
-        limit: int = Query(default=20, ge=1, le=100),
-        offset: int = Query(default=0, ge=0),
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """List all sessions for the authenticated user with metadata."""
     firebase_uid = current_user.get("uid")
 
     metadata_service = SessionMetadataService(clients.db)
     sessions = await metadata_service.list_user_sessions(
-        firebase_uid=firebase_uid,
-        limit=limit,
-        offset=offset
+        firebase_uid=firebase_uid, limit=limit, offset=offset
     )
 
     return {
@@ -195,14 +198,13 @@ async def list_sessions(
         "sessions": sessions,
         "count": len(sessions),
         "limit": limit,
-        "offset": offset
+        "offset": offset,
     }
 
 
 @router.get("/sessions/{session_id}")
 async def get_session_details(
-        session_id: str,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get details for a specific session including metadata."""
     firebase_uid = current_user.get("uid")
@@ -217,9 +219,7 @@ async def get_session_details(
 
     # Get ADK session for state info
     session = await adk.runner.session_service.get_session(
-        app_name=adk.runner.app_name,
-        user_id=user_id,
-        session_id=session_id
+        app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
     )
 
     # Include analysis mode in response
@@ -228,7 +228,7 @@ async def get_session_details(
         "session_id": session_id,
         "metadata": metadata,
         "state": dict(session.state) if session else {},
-        "events_count": len(session.events) if session and session.events else 0
+        "events_count": len(session.events) if session and session.events else 0,
     }
 
     # Ensure analysis mode is visible
@@ -240,11 +240,13 @@ async def get_session_details(
 
 @router.get("/sessions/{session_id}/visualization/{chart_type}")
 async def get_visualization_data(
-        session_id: str,
-        chart_type: str,
-        dimension: Optional[str] = Query(None, description="Data dimension for the chart"),
-        limit: Optional[int] = Query(None, ge=1, le=100, description="Limit number of data points"),
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str,
+    chart_type: str,
+    dimension: Optional[str] = Query(None, description="Data dimension for the chart"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=100, description="Limit number of data points"
+    ),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Get visualization data for a specific chart type.
@@ -278,29 +280,28 @@ async def get_visualization_data(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid chart type: {chart_type}. Valid types: {[e.value for e in VisualizationType]}"
+            detail=f"Invalid chart type: {chart_type}. Valid types: {[e.value for e in VisualizationType]}",
         )
 
     # Get the ADK session to access state and artifacts
     try:
         session = await adk.runner.session_service.get_session(
-            app_name=adk.runner.app_name,
-            user_id=user_id,
-            session_id=session_id
+            app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
         )
     except Exception as e:
         raise HTTPException(
-            status_code=404,
-            detail=f"Session not found in ADK store: {str(e)}"
+            status_code=404, detail=f"Session not found in ADK store: {str(e)}"
         )
 
     # Check if annotations artifact exists in session state
-    annotations_artifact_name = session.state.get('annotations_artifact_name') if session else None
+    annotations_artifact_name = (
+        session.state.get("annotations_artifact_name") if session else None
+    )
 
     if not annotations_artifact_name:
         raise HTTPException(
             status_code=400,
-            detail="Analysis not complete. Please wait for the report to finish generating before accessing visualizations."
+            detail="Analysis not complete. Please wait for the report to finish generating before accessing visualizations.",
         )
 
     try:
@@ -309,23 +310,23 @@ async def get_visualization_data(
             app_name=adk.runner.app_name,
             user_id=user_id,
             session_id=session_id,
-            filename=annotations_artifact_name
+            filename=annotations_artifact_name,
         )
 
         # Deserialize the data
         annotations_data = deserialize_data_from_artifact(annotations_artifact)
 
         # Extract components
-        annotations = annotations_data.get('annotations', {})
-        frequencies = annotations_data.get('frequencies', {})
-        analysis_mode = annotations_data.get('analysis_mode', 'clinical')
-        total_variants_analyzed = annotations_data.get('total_variants_analyzed', 0)
+        annotations = annotations_data.get("annotations", {})
+        frequencies = annotations_data.get("frequencies", {})
+        analysis_mode = annotations_data.get("analysis_mode", "clinical")
+        total_variants_analyzed = annotations_data.get("total_variants_analyzed", 0)
 
         # Initialize chart service
         chart_service = ChartDataService(
             annotations=annotations,
             frequencies=frequencies,
-            analysis_mode=analysis_mode
+            analysis_mode=analysis_mode,
         )
 
         # Generate chart data based on type and dimension
@@ -365,7 +366,7 @@ async def get_visualization_data(
         if not chart_data:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unable to generate {chart_type} chart for dimension {dimension}"
+                detail=f"Unable to generate {chart_type} chart for dimension {dimension}",
             )
 
         # Build response with metadata
@@ -380,8 +381,8 @@ async def get_visualization_data(
                 "total_annotations": len(annotations),
                 "total_variants_analyzed": total_variants_analyzed,
                 "data_points": len(chart_data) if isinstance(chart_data, list) else 1,
-                "generated_at": metadata.get("updated_at")
-            }
+                "generated_at": metadata.get("updated_at"),
+            },
         }
 
         # Add mode-specific context
@@ -396,18 +397,17 @@ async def get_visualization_data(
         raise
     except Exception as e:
         import structlog
+
         logger = structlog.get_logger(__name__)
         logger.exception(f"Error generating visualization: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate visualization: {str(e)}"
+            status_code=500, detail=f"Failed to generate visualization: {str(e)}"
         )
 
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(
-        session_id: str,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Delete a session and its metadata."""
     firebase_uid = current_user.get("uid")
@@ -423,28 +423,28 @@ async def delete_session(
     # Delete from both stores
     try:
         await adk.runner.session_service.delete_session(
-            app_name=adk.runner.app_name,
-            user_id=user_id,
-            session_id=session_id
+            app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
         )
     except Exception as e:
         # Log but continue - session might not exist in ADK store
         import structlog
+
         logger = structlog.get_logger(__name__)
-        logger.warning("Failed to delete ADK session", session_id=session_id, error=str(e))
+        logger.warning(
+            "Failed to delete ADK session", session_id=session_id, error=str(e)
+        )
 
     await metadata_service.delete_metadata(session_id)
 
     return {
         "status": "success",
-        "message": f"Session {session_id} deleted successfully"
+        "message": f"Session {session_id} deleted successfully",
     }
 
 
 @router.post("/sessions/{session_id}/resume")
 async def resume_session(
-        session_id: str,
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str, current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Resume an existing session."""
     firebase_uid = current_user.get("uid")
@@ -459,19 +459,14 @@ async def resume_session(
 
     # Verify session exists in ADK
     session = await adk.runner.session_service.get_session(
-        app_name=adk.runner.app_name,
-        user_id=user_id,
-        session_id=session_id
+        app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
     )
 
     if not session:
         raise HTTPException(status_code=404, detail="Session not found in ADK store")
 
     # Update metadata to mark as active
-    await metadata_service.update_metadata(
-        session_id=session_id,
-        status="active"
-    )
+    await metadata_service.update_metadata(session_id=session_id, status="active")
 
     return {
         "status": "success",
@@ -480,15 +475,15 @@ async def resume_session(
         "state": dict(session.state),
         "events_count": len(session.events) if session.events else 0,
         "analysis_mode": metadata.get("analysis_mode", "clinical"),
-        "message": "Session resumed successfully. You can now send messages to this session."
+        "message": "Session resumed successfully. You can now send messages to this session.",
     }
 
 
 @router.get("/sessions/{session_id}/events")
 async def get_session_events(
-        session_id: str,
-        limit: int = Query(default=50, ge=1, le=200),
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Get the event history for a specific session."""
     firebase_uid = current_user.get("uid")
@@ -503,9 +498,7 @@ async def get_session_events(
 
     # Get ADK session for events
     session = await adk.runner.session_service.get_session(
-        app_name=adk.runner.app_name,
-        user_id=user_id,
-        session_id=session_id
+        app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
     )
 
     if not session:
@@ -513,7 +506,7 @@ async def get_session_events(
             "status": "success",
             "session_id": session_id,
             "events": [],
-            "total_count": 0
+            "total_count": 0,
         }
 
     # Get latest events (most recent first)
@@ -555,15 +548,15 @@ async def get_session_events(
         "events": serializable_events,
         "total_count": total_count,
         "returned_count": len(serializable_events),
-        "analysis_mode": metadata.get("analysis_mode", "clinical")
+        "analysis_mode": metadata.get("analysis_mode", "clinical"),
     }
 
 
 @router.post("/sessions/{session_id}/update")
 async def update_session_metadata(
-        session_id: str,
-        updates: Dict[str, Any],
-        current_user: Dict[str, Any] = Depends(get_current_user)
+    session_id: str,
+    updates: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Update session metadata (title, notes, analysis_mode, etc)."""
     firebase_uid = current_user.get("uid")
@@ -581,27 +574,29 @@ async def update_session_metadata(
 
     # Validate analysis_mode if being updated
     if "analysis_mode" in filtered_updates:
-        if filtered_updates["analysis_mode"] not in ['clinical', 'research']:
+        if filtered_updates["analysis_mode"] not in ["clinical", "research"]:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid analysis_mode. Must be 'clinical' or 'research'"
+                detail="Invalid analysis_mode. Must be 'clinical' or 'research'",
             )
 
         # Also update in ADK session state if mode is being changed
         user_id = map_firebase_to_adk_user(firebase_uid)
         session = await adk.runner.session_service.get_session(
-            app_name=adk.runner.app_name,
-            user_id=user_id,
-            session_id=session_id
+            app_name=adk.runner.app_name, user_id=user_id, session_id=session_id
         )
 
         if session:
             mode_update_event = Event(
                 author="system",
                 invocation_id=str(uuid.uuid4()),
-                actions=EventActions(state_delta={'analysis_mode': filtered_updates["analysis_mode"]})
+                actions=EventActions(
+                    state_delta={"analysis_mode": filtered_updates["analysis_mode"]}
+                ),
             )
-            await adk.runner.session_service.append_event(session=session, event=mode_update_event)
+            await adk.runner.session_service.append_event(
+                session=session, event=mode_update_event
+            )
 
     if filtered_updates:
         await metadata_service.update_metadata(session_id, **filtered_updates)
@@ -609,5 +604,5 @@ async def update_session_metadata(
     return {
         "status": "success",
         "session_id": session_id,
-        "updated_fields": list(filtered_updates.keys())
+        "updated_fields": list(filtered_updates.keys()),
     }

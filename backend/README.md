@@ -19,7 +19,7 @@ flowchart TD
 
     subgraph "Google Kubernetes Engine (GKE) - n2-highmem-32 Node"
         GKE_Service[FastAPI / ADK Runner]
-        
+
         subgraph "GenomicCoordinator (Root Agent)"
             A[InitiationPipeline]
             B[CompletionPipeline]
@@ -31,11 +31,11 @@ flowchart TD
         GKE_Service -- delegates to --> B
         GKE_Service -- delegates to --> C
         GKE_Service -- delegates to --> D
-        
+
         PD(("<font size=5>&#128190;</font> VEP Cache<br>(Persistent Disk)"))
         Worker_Pod -- mounts --> PD
     end
-    
+
     subgraph "Background Processing"
         A -- "2. Creates VEP Task" --> Cloud_Tasks
         B -- "4. Creates Report Task" --> Cloud_Tasks
@@ -43,12 +43,12 @@ flowchart TD
         GKE_Worker_Endpoint(GKE Worker Endpoints<br>/worker/run-vep<br>/worker/generate-report)
         GKE_Worker_Endpoint -- runs on --> Worker_Pod(Background Worker Pod)
     end
-    
+
     subgraph "Knowledge Sources"
         BigQuery(("<font size=5>&#128202;</font> BigQuery<br>gnomAD Public Data"))
         ClinVar(("<font size=5>&#128218;</font> ClinVar<br>(Local Cache)"))
     end
-    
+
     subgraph "Persistent State & Data"
         Firestore(("<font size=5>&#128221;</font> Firestore<br>(Task Status)"))
         GCS(("<font size=5>&#128193;</font> GCS<br>(Artifacts)"))
@@ -77,29 +77,30 @@ flowchart TD
     - **BigQuery gnomAD:** Queries population frequencies from public gnomAD datasets (v2 and v3)
     - **ClinVar:** Local cache for clinical significance annotations
 9.  **Persistent Storage:**
-    *   **Firestore:** Reliably tracks the status of long-running jobs
-    *   **Google Cloud Storage (GCS):** Stores the large data artifacts (parsed variants, annotated variants, final findings) generated during the pipeline.
-    *   **GCE Persistent Disk:** Provides fast, read-only access to the pre-downloaded VEP cache for high-performance annotation.
+    - **Firestore:** Reliably tracks the status of long-running jobs
+    - **Google Cloud Storage (GCS):** Stores the large data artifacts (parsed variants, annotated variants, final findings) generated during the pipeline.
+    - **GCE Persistent Disk:** Provides fast, read-only access to the pre-downloaded VEP cache for high-performance annotation.
 
 ## Features
 
--   **Multi-Agent Architecture:** Uses robust `SequentialAgent` workflows controlled by a top-level coordinator for maximum reliability.
--   **Population Frequency Integration:** Queries gnomAD BigQuery for allele frequencies across multiple populations.
--   **Dual Reference Support:** Automatically queries both gnomAD v2 (GRCh37) and v3 (GRCh38) to handle reference mismatches.
--   **Long-Running Task Offloading:** Intelligently offloads the multi-hour VEP annotation process to a background worker managed by Google Cloud Tasks.
--   **Two-Phase Background Processing:** 
-    - Phase 1: VEP annotation (~1 hour)
-    - Phase 2: Knowledge retrieval + clinical assessment (~3-5 minutes)
--   **Non-Blocking Architecture:** All heavy operations run asynchronously or in background workers.
--   **Optimized Performance:** Leverages a high-performance GKE node (32 vCPU / 256 GB RAM) and a pre-populated Persistent Disk for the VEP cache, reducing VEP processing time from 6+ hours to ~1 hour.
--   **Intelligent Clinical Assessment:** Employs a sophisticated "map-reduce" pattern to analyze thousands of pathogenic variants, identify clinically significant patterns (like compound heterozygosity), and generate a high-quality summary.
--   **Population-Aware Risk Assessment:** Incorporates ancestry-specific frequencies for precision medicine.
--   **Conversational Querying:** After the analysis is complete, a dedicated `QueryAgent` allows for fast, interactive follow-up questions about specific genes.
--   **HTTPS Support:** Production-ready HTTPS endpoint with SSL/TLS termination for secure API access from web frontends.
+- **Multi-Agent Architecture:** Uses robust `SequentialAgent` workflows controlled by a top-level coordinator for maximum reliability.
+- **Population Frequency Integration:** Queries gnomAD BigQuery for allele frequencies across multiple populations.
+- **Dual Reference Support:** Automatically queries both gnomAD v2 (GRCh37) and v3 (GRCh38) to handle reference mismatches.
+- **Long-Running Task Offloading:** Intelligently offloads the multi-hour VEP annotation process to a background worker managed by Google Cloud Tasks.
+- **Two-Phase Background Processing:**
+  - Phase 1: VEP annotation (~1 hour)
+  - Phase 2: Knowledge retrieval + clinical assessment (~3-5 minutes)
+- **Non-Blocking Architecture:** All heavy operations run asynchronously or in background workers.
+- **Optimized Performance:** Leverages a high-performance GKE node (32 vCPU / 256 GB RAM) and a pre-populated Persistent Disk for the VEP cache, reducing VEP processing time from 6+ hours to ~1 hour.
+- **Intelligent Clinical Assessment:** Employs a sophisticated "map-reduce" pattern to analyze thousands of pathogenic variants, identify clinically significant patterns (like compound heterozygosity), and generate a high-quality summary.
+- **Population-Aware Risk Assessment:** Incorporates ancestry-specific frequencies for precision medicine.
+- **Conversational Querying:** After the analysis is complete, a dedicated `QueryAgent` allows for fast, interactive follow-up questions about specific genes.
+- **HTTPS Support:** Production-ready HTTPS endpoint with SSL/TLS termination for secure API access from web frontends.
 
 ## Analysis Capabilities
 
 This system performs comprehensive whole-genome analysis with population context, not targeted gene panels:
+
 - Analyzes ALL 7.8M+ variants in the VCF
 - Identifies ~1,000-2,000 pathogenic variants across all genes
 - Queries population frequencies for up to 10,000 variants from gnomAD
@@ -122,119 +123,90 @@ This system performs comprehensive whole-genome analysis with population context
 
 ## Prerequisites
 
--   Google Cloud SDK (`gcloud`)
--   `kubectl` command-line tool
--   Docker
--   Python 3.10+
--   A Google Cloud Project with the following APIs enabled:
-    -   Kubernetes Engine API
-    -   Artifact Registry API
-    -   Cloud Build API
-    -   Cloud Tasks API
-    -   Firestore API
-    -   BigQuery API (for gnomAD)
-    -   IAM API
--   (Optional) A domain name for HTTPS access
--   (Optional) Google Cloud DNS or another DNS provider
+- Google Cloud SDK (`gcloud`)
+- `kubectl` command-line tool
+- Docker
+- `envsubst` (from gettext-base package on Linux, or Homebrew on macOS)
+- Python 3.10+
+- A Google Cloud Project with the following APIs enabled:
+  - Kubernetes Engine API
+  - Artifact Registry API
+  - Cloud Build API
+  - Cloud Tasks API
+  - Firestore API
+  - BigQuery API (for gnomAD)
+  - IAM API
+- (Optional) Google Cloud DNS or another DNS provider
+- The following environment variables should be set in your `.env` file or environment:
+  - `CORS_PRODUCTION_ORIGINS`: Comma-separated list of allowed origins for production CORS.
+  - `ALLOWED_AUTH_DOMAINS`: Comma-separated list of allowed email domains for authentication.
+  - `PUBLIC_API_PREFIX`: (Optional) A prefix for all API routes, e.g., `/api`.
 
 ## Setup and Deployment
 
 ### 1. Google Cloud Services Setup (One-Time)
 
 a. **Create Firestore Database:**
+
 ```bash
-gcloud firestore databases create --location=us-central1 --project=<YOUR_PROJECT_ID>
+# Ensure GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are set in your environment or .env file
+# e.g., export GOOGLE_CLOUD_PROJECT="your-project-id"
+# e.g., export GOOGLE_CLOUD_LOCATION="us-central1"
+just setup-firestore
 ```
 
 b. **Create Cloud Tasks Queue:**
+
 ```bash
-gcloud tasks queues create background \
-  --location=us-central1 \
-  --project=<YOUR_PROJECT_ID>
+just setup-cloud-tasks
 ```
 
 c. **Create Artifact Registry Repository:**
-```bash
-gcloud artifacts repositories create prod \
-  --repository-format=docker \
-  --location=us-central1 \
-  --project=<YOUR_PROJECT_ID>
 
-# Configure Docker authentication
-gcloud auth configure-docker us-central1-docker.pkg.dev
+```bash
+just setup-artifact-registry
 ```
 
 d. **Enable BigQuery API (for gnomAD):**
+
 ```bash
-gcloud services enable bigquery.googleapis.com --project=<YOUR_PROJECT_ID>
+just enable-bigquery-api
 ```
 
 ### 2. GKE Infrastructure Setup
 
 a. **Create GKE Cluster:**
+
 ```bash
-gcloud container clusters create genomics-cluster \
-  --zone=us-central1-a \
-  --num-nodes=1 \
-  --enable-autoscaling --min-nodes=0 --max-nodes=1 \
-  --machine-type=n2-highmem-32 \
-  --workload-pool=<YOUR_PROJECT_ID>.svc.id.goog \
-  --addons GcsFuseCsiDriver \
-  --project=<YOUR_PROJECT_ID>
+just create-gke-cluster
 ```
 
 b. **Get Cluster Credentials:**
+
 ```bash
-gcloud container clusters get-credentials genomics-cluster \
-  --zone=us-central1-a \
-  --project=<YOUR_PROJECT_ID>
+just get-cluster-credentials
 ```
 
 c. **Create Kubernetes Service Account:**
-```bash
-kubectl create serviceaccount genomics-agent-ksa
 
-# Annotate for Workload Identity
-kubectl annotate serviceaccount genomics-agent-ksa \
-  iam.gke.io/gcp-service-account=firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com
+```bash
+just create-k8s-service-account
 ```
 
 d. **Set Up Workload Identity Binding:**
+
 ```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com \
-  --role=roles/iam.workloadIdentityUser \
-  --member="serviceAccount:<YOUR_PROJECT_ID>.svc.id.goog[default/genomics-agent-ksa]" \
-  --project=<YOUR_PROJECT_ID>
+just setup-workload-identity
 ```
 
 e. **Grant Required IAM Permissions:**
+
+e. **Grant Required IAM Permissions:**
 ```bash
-# Firestore access
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com" \
-  --role="roles/datastore.user"
-
-# Cloud Tasks access
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com" \
-  --role="roles/cloudtasks.enqueuer"
-
-# GCS access
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com" \
-  --role="roles/storage.objectViewer"
-
-# BigQuery access (for gnomAD)
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com" \
-  --role="roles/bigquery.jobUser"
-
-# BigQuery data viewer for public datasets
-gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
-  --member="serviceAccount:firebase-adminsdk-fbsvc@<YOUR_PROJECT_ID>.iam.gserviceaccount.com" \
-  --role="roles/bigquery.dataViewer"
+just grant-iam-permissions
 ```
+
+````
 
 ### 3. VEP Cache Setup (one-time)
 
@@ -244,21 +216,8 @@ This step downloads approximately 100GB of data and should only be performed onc
 
 ```bash
 # Create a GCS bucket to store the VEP cache permanently
-gcloud storage buckets create gs://<YOUR_PROJECT_ID>_vep-cache-bucket --project=<YOUR_PROJECT_ID> --location=US-CENTRAL1
-
-# Create a local directory for the download
-mkdir -p ~/vep_cache_data
-cd ~/vep_cache_data
-
-# Download the VEP cache for GRCh38 (this is a ~100GB file and will take time)
-wget https://ftp.ensembl.org/pub/release-113/variation/indexed_vep_cache/homo_sapiens_vep_113_GRCh38.tar.gz
-
-# Extract the cache
-tar -xzvf homo_sapiens_vep_113_GRCh38.tar.gz
-
-# Upload the extracted 'homo_sapiens' directory to your GCS bucket
-# This will also take a significant amount of time
-gsutil -m cp -r homo_sapiens gs://<YOUR_PROJECT_ID>_vep-cache-bucket/
+just create-vep-bucket
+just download-vep-cache
 ```
 
 b. **Create and Populate Persistent Disk for VEP Cache:**
@@ -267,30 +226,22 @@ This step copies the data from your GCS bucket onto a GCE Persistent Disk, which
 
 ```bash
 # Create the disk
-gcloud compute disks create vep-cache-disk --size=100GB --zone=us-central1-a --project=<YOUR_PROJECT_ID>
+just create-vep-disk
 
 # Create a temporary VM to load the cache data
-gcloud compute instances create cache-loader --zone=us-central1-a --disk=name=vep-cache-disk,mode=rw --project=<YOUR_PROJECT_ID>
+just create-cache-loader-vm
 
 # SSH into the VM and run the following commands inside it
-gcloud compute ssh cache-loader --zone=us-central1-a
-
-# --- Inside the VM ---
-sudo mkfs.ext4 /dev/sdb
-sudo mkdir -p /mnt/cache/homo_sapiens
-sudo mount /dev/sdb /mnt/cache
-sudo chmod 777 /mnt/cache/homo_sapiens
-gsutil -m cp -r gs://<YOUR_PROJECT_ID>_vep-cache-bucket/homo_sapiens/113_GRCh38 /mnt/cache/homo_sapiens/
-exit
-# --- End of VM commands ---
+just ssh-cache-loader-vm
 
 # Delete the temporary VM (the disk and its data will remain)
-gcloud compute instances delete cache-loader --zone=us-central1-a --quiet
-```
+just delete-cache-loader-vm
+````
 
 ### 4. Application Setup
 
 a. **Clone Repository & Install Dependencies:**
+
 ```bash
 git clone <your-repo-url>
 cd backend
@@ -301,6 +252,7 @@ pip install -r requirements.txt
 
 b. **Update Dependencies (`requirements.txt`):**
 Ensure these are included:
+
 ```
 google-cloud-bigquery==3.11.4
 google-cloud-firestore==2.11.1
@@ -309,12 +261,14 @@ google-cloud-tasks==2.13.1
 
 c. **Configure Environment (`.env` file):**
 Create a `.env` file in the root of the project and add:
+
 ```
 GEMINI_API_KEY="AIzaSy..."
 GOOGLE_CLOUD_PROJECT="<YOUR_PROJECT_ID>"
 ```
 
 d. **Authenticate `gcloud`:**
+
 ```bash
 gcloud auth application-default login
 ```
@@ -322,166 +276,186 @@ gcloud auth application-default login
 ### 5. Build and Deploy
 
 a. **Build and Push the Docker Image:**
+
 ```bash
-gcloud builds submit --tag us-central1-docker.pkg.dev/<YOUR_PROJECT_ID>/prod/genomics-agent:latest --project=<YOUR_PROJECT_ID>
+# Ensure GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are set in your environment or .env file
+just build
 ```
 
 b. **Create Kubernetes Secret:**
+
 ```bash
-kubectl create secret generic gemini-api-key-secret --from-literal=key='<YOUR_GEMINI_API_KEY>'
+# Ensure GEMINI_API_KEY is set in your environment or .env file
+just create-gemini-secret
 ```
 
 c. **Deploy to GKE:**
-- Edit `gke/genomics-deployment.yaml` to:
-  - Use your image tag
-  - Set correct environment variables (PROJECT_ID, QUEUE_NAME, etc.)
-- Apply the Kubernetes configurations:
+
+- The deployment uses environment variables for configuration. Ensure that `GOOGLE_CLOUD_PROJECT`, `TASKS_QUEUE_NAME`, and `WORKER_URL` are correctly set in your environment or `.env` file before running.
+- The `gke/genomics-deployment.yaml` file is templated using `envsubst`.
+
 ```bash
-kubectl apply -f gke/genomics-deployment.yaml
+just deploy
 ```
 
-d. **Get the External IP and Update the Worker URL:**
-```bash
-# This may take a few minutes
-kubectl get service genomics-agent-service
+d. **Deploy to GKE with IAP:**
 
-# Once you have the EXTERNAL-IP, update the running deployment
-kubectl set env deployment/genomics-agent WORKER_URL=http://<YOUR_EXTERNAL_IP>/worker/run-vep
+- The deployment uses environment variables for configuration. Ensure that `GOOGLE_CLOUD_PROJECT`, `TASKS_QUEUE_NAME`, and `WORKER_URL` are correctly set in your environment or `.env` file before running.
+- The `gke/genomics-deployment-iap.yaml` file is templated using `envsubst`.
+
+```bash
+just deployi-iap
 ```
 
-e. **Force a Pod Restart** to apply the new environment variable:
+
+### 6. Set up Identity-Aware Proxy (IAP) Credentials
+
+To secure your application behind Google Cloud Identity-Aware Proxy (IAP), you must create an OAuth Client ID and Secret specifically configured for IAP. Since the gcloud CLI tools for OAuth are deprecated, this must be done via the Google Cloud Console.
+
+**Option 1: Create a Brand New OAuth Client ID and Secret (Recommended)**
+
+1. Go to **APIs & Services > Credentials** in the [Google Cloud Console](https://console.cloud.google.com/).
+2. Make sure you are in the correct project (`<YOUR_PROJECT_ID>`).
+3. Click **+ CREATE CREDENTIALS** at the top of the page and select **OAuth client ID**.
+4. Set **Application type** to **Web application**.
+5. Give it a descriptive **Name** (e.g., "Genomics IAP Client").
+6. Click **Create**. A modal will pop up displaying your brand new **Client ID** and **Client secret**. Copy both of these.
+7. **Important Next Step (Redirect URI):** Because this is for IAP, you must tell Google to allow IAP to handle the login redirects.
+   - Click on the name of the new client you just created to edit it.
+   - Under **Authorized redirect URIs**, click **+ ADD URI**.
+   - Enter the following exact URL, replacing `<YOUR_NEW_CLIENT_ID>` with the Client ID you just generated:
+     `https://iap.googleapis.com/v1/oauth/clientIds/<YOUR_NEW_CLIENT_ID>:handleRedirect`
+   - Click **Save**.
+
+**Option 2: Reset the Secret for an Existing Client ID**
+
+If you already have a "Web client (auto created by Google Service)" and just need to rotate its secret:
+
+1. Go to **APIs & Services > Credentials** in the Cloud Console.
+2. Under the **OAuth 2.0 Client IDs** section, click on the name of your existing client.
+3. On the right-hand side, click the **RESET SECRET** button.
+4. Confirm the prompt to generate a new secret. Note that the old secret will stop working immediately.
+
+Once you have your Client ID and Client secret:
+
+1.  Set `IAP_CLIENT_ID` and `IAP_CLIENT_SECRET` in your environment or `.env` file.
+2.  Run the `just` command to create the Kubernetes secret:
+    ```bash
+    just setup-iap-secret
+    ```
+
+## 7. Vertex AI Reasoning Engine Setup
+
+This project leverages Google Cloud's Vertex AI for conversational session persistence, allowing for more robust and stateful interactions with the agents.
+
+### Prerequisites
+- Ensure `aiplatform.googleapis.com` is enabled in your Google Cloud Project.
+- The following environment variables set in your shell or `.env` file:
+  - `AGENT_ENGINE_ID`: The ID of your Vertex AI Agent Engine.
+  - `USE_VERTEX_AI_SESSIONS`: Set to `true` to enable Vertex AI for session persistence.
+  - `VERTEX_AI_LOCATION`: The Google Cloud region where your Vertex AI resources are located (e.g., `us-central1`).
+  - `REASONING_ENGINE_SA`: The service account for the Reasoning Engine.
+
+### Setup Steps
+
+a. **Enable Vertex AI and Set Up IAM Roles:**
 ```bash
-kubectl rollout restart deployment/genomics-agent
-# (You may need to manually delete the old pod to resolve the persistent disk deadlock)
+just setup-vertex-ai
 ```
 
-## HTTPS Load Balancer Setup (Production)
+b. **Create the Agent Engine:**
+```bash
+just create_agent_engine
+```
 
-Modern web applications require HTTPS for security and to avoid mixed-content issues when your frontend is served over HTTPS. The default Kubernetes LoadBalancer service only provides HTTP access, so you'll need to set up a Google Cloud HTTPS Load Balancer for production use.
+## 8. HTTPS Load Balancer Setup (Production)
 
-### Option 1: Google Cloud HTTPS Load Balancer (Recommended for Production)
+This section describes how to set up a production-ready Google Cloud HTTPS Load Balancer with your own domain. The `justfile` provides recipes to automate most of this process.
 
-This option provides a production-ready HTTPS endpoint with your own domain.
+### Prerequisites
 
-#### Prerequisites
 - A domain name (e.g., `api.yourdomain.com`)
 - Access to your domain's DNS settings
+- The following environment variables set in your shell or `.env` file:
+  - `GOOGLE_CLOUD_PROJECT`
+  - `GOOGLE_CLOUD_ZONE` (e.g., `us-central1-a`)
+  - `PUBLIC_API_DOMAIN` (e.g., `api.yourdomain.com`)
 
-#### Step 1: Reserve a Static IP Address
+### Step 1: Reserve a Static IP and Configure DNS
+
+a. **Reserve the IP address:**
+
 ```bash
-# Reserve a global static IP
-gcloud compute addresses create genomics-api-ip \
-    --global \
-    --project=<YOUR_PROJECT_ID>
-
-# Get the IP address
-gcloud compute addresses describe genomics-api-ip --global --format="value(address)"
+just reserve-global-ip
 ```
 
-#### Step 2: Configure DNS
-Add an A record in your domain's DNS settings:
-- Name: `api` (or your preferred subdomain)
-- Type: `A`
-- Value: The static IP address from Step 1
-- TTL: 300 (or your preference)
+b. **Get the IP address:**
 
-Wait for DNS propagation (5-30 minutes typically).
-
-#### Step 3: Create SSL Certificate
 ```bash
-# Create a managed SSL certificate (Google will handle renewal)
-gcloud compute ssl-certificates create genomics-api-cert \
-    --domains=api.yourdomain.com \
-    --global \
-    --project=<YOUR_PROJECT_ID>
+# The default IP name is 'my-global-ip', check the justfile if you changed it.
+gcloud compute addresses describe my-global-ip --global --format="value(address)"
 ```
 
-#### Step 4: Get Required Information
-```bash
-# Get the NodePort for your service
-kubectl get service genomics-agent-service
-# Note the port number after the colon (e.g., 80:31799/TCP → 31799 is the NodePort)
+c. **Configure DNS:**
+Add an **A record** in your domain's DNS settings:
 
-# Get the instance group name
-gcloud compute instance-groups list --zones=us-central1-a
-# Look for the group name like: gke-genomics-cluster-default-pool-XXXXX-grp
+- **Name**: `api` (or your preferred subdomain)
+- **Type**: `A`
+- **Value**: The static IP address from the previous step.
+- **TTL**: 300 (or your preference)
+
+Wait for DNS propagation (this can take 5-30 minutes).
+
+### Step 2: Create SSL Certificate
+
+Google will provision and manage a free SSL certificate for your domain.
+
+```bash
+just create-ssl-cert
 ```
 
-#### Step 5: Create Firewall Rule for Health Checks
+_Note: SSL certificate provisioning can take up to 60 minutes. You can check the status with `gcloud compute ssl-certificates describe genomics-managed-cert --global`._
+
+### Step 3: Set up Firewall and Load Balancer Components
+
+This single command will:
+
+1.  Create the necessary firewall rules for health checks.
+2.  Create a health check.
+3.  Create a backend service.
+4.  Add your GKE instance group to the backend service.
+5.  Create a URL map.
+6.  Create an HTTPS proxy.
+7.  Create a forwarding rule to route traffic to your service.
+
 ```bash
-# Allow Google Cloud health checkers to reach the NodePort
-gcloud compute firewall-rules create allow-gke-health-checks \
-    --allow tcp:<YOUR_NODEPORT> \
-    --source-ranges 130.211.0.0/22,35.191.0.0/16 \
-    --network default \
-    --description "Allow Google Cloud health checks to NodePort"
+just setup-load-balancer
 ```
 
-#### Step 6: Create Health Check
+### Step 4: Verify Setup
+
+It may take a few minutes for the backend service to report as healthy.
+
+a. **Check backend health:**
+
 ```bash
-gcloud compute health-checks create http genomics-api-health-check \
-    --port=<YOUR_NODEPORT> \
-    --request-path="/health" \
-    --check-interval=10s \
-    --timeout=5s \
-    --unhealthy-threshold=3 \
-    --healthy-threshold=2 \
-    --global
+just check-backend-health
 ```
 
-#### Step 7: Create Backend Service
-```bash
-# Create the backend service
-gcloud compute backend-services create genomics-gke-backend-service \
-    --protocol=HTTP \
-    --health-checks=genomics-api-health-check \
-    --global
+Wait until the `healthState` is `HEALTHY`.
 
-# Add the instance group as a backend
-gcloud compute backend-services add-backend genomics-gke-backend-service \
-    --instance-group=<YOUR_INSTANCE_GROUP_NAME> \
-    --instance-group-zone=us-central1-a \
-    --balancing-mode=UTILIZATION \
-    --max-utilization=0.8 \
-    --global
+b. **Test the HTTPS endpoint:**
+
+```bash
+curl https://{{PUBLIC_API_DOMAIN}}/health
 ```
 
-#### Step 8: Create URL Map
+### Tearing Down the Load Balancer
+
+To avoid ongoing costs, you can delete all the load balancer components with a single command.
+
 ```bash
-gcloud compute url-maps create genomics-api-url-map \
-    --default-service=genomics-gke-backend-service
-```
-
-#### Step 9: Create HTTPS Proxy
-```bash
-gcloud compute target-https-proxies create genomics-api-https-proxy \
-    --url-map=genomics-api-url-map \
-    --ssl-certificates=genomics-api-cert \
-    --global
-```
-
-#### Step 10: Create Forwarding Rule
-```bash
-gcloud compute forwarding-rules create genomics-api-https-rule \
-    --address=genomics-api-ip \
-    --target-https-proxy=genomics-api-https-proxy \
-    --ports=443 \
-    --global
-```
-
-#### Step 11: Verify Setup
-```bash
-# Check backend health (may take 2-3 minutes to become healthy)
-gcloud compute backend-services get-health genomics-gke-backend-service --global
-
-# Test the HTTPS endpoint
-curl https://api.yourdomain.com/health
-
-# Test the API
-curl -X POST https://api.yourdomain.com/run \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
-  -d '{"input_text": "Test message"}'
+just destroy-load-balancer
 ```
 
 ### Option 2: Ngrok (Quick Development/Testing)
@@ -489,7 +463,9 @@ curl -X POST https://api.yourdomain.com/run \
 For rapid development and testing without setting up a full load balancer, ngrok provides a quick HTTPS tunnel to your service.
 
 #### Setup Ngrok
+
 1. **Install ngrok:**
+
 ```bash
 # macOS
 brew install ngrok
@@ -503,11 +479,13 @@ snap install ngrok
 2. **Create free ngrok account** at https://ngrok.com and get your auth token
 
 3. **Authenticate ngrok:**
+
 ```bash
 ngrok config add-authtoken YOUR_AUTH_TOKEN
 ```
 
 4. **Create tunnel to your Kubernetes LoadBalancer:**
+
 ```bash
 # Get your LoadBalancer external IP
 kubectl get service genomics-agent-service
@@ -518,15 +496,17 @@ ngrok http http://<YOUR_EXTERNAL_IP>
 ```
 
 5. **Use the ngrok URL:**
-Ngrok will provide a URL like `https://abc123.ngrok.io` that you can use immediately for testing.
+   Ngrok will provide a URL like `https://abc123.ngrok.io` that you can use immediately for testing.
 
 **Ngrok Advantages:**
+
 - Instant HTTPS endpoint
 - No DNS configuration needed
 - Great for development and demos
 - Includes request inspection
 
 **Ngrok Limitations:**
+
 - URL changes on each restart (unless using paid plan)
 - Rate limits on free tier
 - Not suitable for production
@@ -535,6 +515,7 @@ Ngrok will provide a URL like `https://abc123.ngrok.io` that you can use immedia
 ### Troubleshooting HTTPS Setup
 
 **Backend shows unhealthy:**
+
 ```bash
 # Check if NodePort is accessible
 curl http://<NODE_EXTERNAL_IP>:<NODEPORT>/health
@@ -547,14 +528,17 @@ gcloud compute health-checks describe genomics-api-health-check
 ```
 
 **SSL certificate not provisioning:**
+
 - Ensure DNS is properly configured and propagated
 - Certificate provisioning can take up to 60 minutes
 - Check certificate status:
+
 ```bash
 gcloud compute ssl-certificates describe genomics-api-cert --global
 ```
 
 **Mixed content errors in browser:**
+
 - Ensure all API calls use HTTPS
 - Update frontend to use `https://api.yourdomain.com` instead of HTTP endpoints
 - Check browser console for specific mixed content warnings
@@ -564,6 +548,7 @@ gcloud compute ssl-certificates describe genomics-api-cert --global
 The system now includes comprehensive population frequency analysis via BigQuery:
 
 ### Features
+
 - **Dual Database Support:** Queries both gnomAD v2 (GRCh37) and v3 (GRCh38) to handle reference genome differences
 - **Population Stratification:** Returns frequencies for:
   - African (AFR)
@@ -578,7 +563,9 @@ The system now includes comprehensive population frequency analysis via BigQuery
 - **Cost-Optimized:** Limits queries to 10,000 variants per analysis (~$0.50 per run)
 
 ### Example gnomAD Output
+
 For a pathogenic APOB variant:
+
 ```json
 {
   "variant": "2:21006087:C>T",
@@ -601,12 +588,14 @@ For a pathogenic APOB variant:
 ### Phase 1: Start Analysis
 
 1.  **Get a unique session ID:**
+
     ```bash
     SESSION_ID="my-analysis-$(date +%s)"
     echo "Using Session ID: $SESSION_ID"
     ```
 
 2.  **Get Firebase Auth Token:**
+
     ```bash
     # You'll need to obtain a Firebase ID token from your authenticated user
     # This typically comes from your frontend application
@@ -614,25 +603,27 @@ For a pathogenic APOB variant:
     ```
 
 3.  **Send the VCF path:**
+
     ```bash
-    # For HTTPS (production)
-    curl -X POST https://api.yourdomain.com/run \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $FIREBASE_TOKEN" \
-      -d '{
-        "session_id": "'$SESSION_ID'",
-        "input_text": "Please analyze gs://brain-genomics/awcarroll/vcf_agent/HG002.novaseq.pcr-free.30x.deepvariant-v1.0.grch38.pathogenic.sort.vcf.gz"
-      }'
-    
-    # For HTTP (development only)
-    curl -X POST http://<YOUR_GKE_IP>/run \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $FIREBASE_TOKEN" \
-      -d '{
-        "session_id": "'$SESSION_ID'",
-        "input_text": "Please analyze gs://brain-genomics/awcarroll/vcf_agent/HG002.novaseq.pcr-free.30x.deepvariant-v1.0.grch38.pathogenic.sort.vcf.gz"
-      }'
-    ```
+        # For HTTPS (production)
+        # Adjust the URL if you are using PUBLIC_API_PREFIX, e.g., PUBLIC_API_DOMAIN/api/run
+        curl -X POST https://${PUBLIC_API_DOMAIN}/run \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $FIREBASE_TOKEN" \
+          -d '{
+            "session_id": "'$SESSION_ID'",
+            "input_text": "Please analyze gs://brain-genomics/awcarroll/vcf_agent/HG002.novaseq.pcr-free.30x.deepvariant-v1.0.grch38.pathogenic.sort.vcf.gz"
+          }'
+        
+        # For HTTP (development only)
+        # Adjust the URL if you are using PUBLIC_API_PREFIX, e.g., YOUR_GKE_IP/api/run
+        curl -X POST http://<YOUR_GKE_IP>/run \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $FIREBASE_TOKEN" \
+          -d '{
+            "session_id": "'$SESSION_ID'",
+            "input_text": "Please analyze gs://brain-genomics/awcarroll/vcf_agent/HG002.novaseq.pcr-free.30x.deepvariant-v1.0.grch38.pathogenic.sort.vcf.gz"
+          }'    ```
 
 4.  **Receive the Task ID** from the immediate response.
 
@@ -641,8 +632,10 @@ For a pathogenic APOB variant:
 1.  **Wait** for the VEP process to complete (~60-70 minutes). Monitor logs if desired.
 
 2.  **Check status and trigger report generation:**
+
     ```bash
-    curl -X POST https://api.yourdomain.com/run \
+    # Adjust the URL if you are using PUBLIC_API_PREFIX, e.g., PUBLIC_API_DOMAIN/api/run
+    curl -X POST https://${PUBLIC_API_DOMAIN}/run \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $FIREBASE_TOKEN" \
       -d '{
@@ -650,12 +643,13 @@ For a pathogenic APOB variant:
         "input_text": "Is my VEP analysis complete?"
       }'
     ```
-    
+
     The system will automatically start report generation (3-5 minutes) if VEP is complete.
 
 3.  **Get the final report:**
     ```bash
-    curl -X POST https://api.yourdomain.com/run \
+    # Adjust the URL if you are using PUBLIC_API_PREFIX, e.g., PUBLIC_API_DOMAIN/api/run
+    curl -X POST https://${PUBLIC_API_DOMAIN}/run \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $FIREBASE_TOKEN" \
       -d '{
@@ -667,8 +661,10 @@ For a pathogenic APOB variant:
 ### Phase 3: Conversational Querying
 
 1.  After receiving the main report, ask specific follow-up questions:
+
     ```bash
-    curl -X POST https://api.yourdomain.com/run \
+    # Adjust the URL if you are using PUBLIC_API_PREFIX, e.g., PUBLIC_API_DOMAIN/api/run
+    curl -X POST https://${PUBLIC_API_DOMAIN}/run \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $FIREBASE_TOKEN" \
       -d '{
@@ -725,6 +721,7 @@ Key Population Insights:
 **This deployment uses powerful and expensive compute resources.** To avoid unnecessary costs:
 
 ### Daily Cost Estimates (approximate):
+
 - GKE n2-highmem-32 node: ~$20-30/day when running
 - BigQuery (gnomAD queries): ~$0.50 per full analysis
 - HTTPS Load Balancer: ~$0.50/day
@@ -756,12 +753,14 @@ gcloud compute health-checks delete genomics-api-health-check --quiet
 ## Development vs Production
 
 ### Development Setup
+
 - Use HTTP with Kubernetes LoadBalancer service
 - Or use ngrok for quick HTTPS testing
 - Single replica
 - Permissive CORS settings
 
 ### Production Setup
+
 - Use HTTPS Load Balancer with custom domain
 - SSL certificate management
 - Appropriate CORS restrictions
@@ -773,7 +772,7 @@ gcloud compute health-checks delete genomics-api-health-check --quiet
 
 ```bash
 # View pod logs
-kubectl logs -f deployment/genomics-agent
+just logs
 
 # Check load balancer logs
 gcloud logging read "resource.type=http_load_balancer" --limit=20 --format=json
@@ -805,10 +804,11 @@ client = GnomADClient()
 ## Architecture Benefits
 
 The gnomAD BigQuery integration provides several advantages:
+
 - **No local storage**: Eliminates 16GB local gnomAD database
 - **Always current**: Uses latest gnomAD releases maintained by Broad Institute
 - **Scalable**: Can query millions of variants efficiently
 - **Cost-effective**: Leverages Google's free tier (1TB/month)
 - **Non-blocking**: Async queries prevent UI freezing
 - **Comprehensive**: Access to all populations and subpopulations
-- 
+-

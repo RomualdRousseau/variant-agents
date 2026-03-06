@@ -2,6 +2,7 @@
 Defines the FastAPI worker endpoints that are triggered by Cloud Tasks
 to execute long-running background jobs like VEP annotation and report generation.
 """
+
 import structlog
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
@@ -17,11 +18,13 @@ router = APIRouter()
 
 class VepTaskRequest(BaseModel):
     """The request body sent by Cloud Tasks to trigger a VEP job."""
+
     task_id: str
 
 
 class ReportTaskRequest(BaseModel):
     """The request body sent by Cloud Tasks to trigger report generation."""
+
     task_id: str
 
 
@@ -55,8 +58,7 @@ async def run_vep_task(request: VepTaskRequest, background_tasks: BackgroundTask
 
     # Pass the live client to the VepRunnerService
     vep_runner = VepRunnerService(
-        db_client=db_client,
-        artifact_service=adk.artifact_service
+        db_client=db_client, artifact_service=adk.artifact_service
     )
 
     background_tasks.add_task(
@@ -64,13 +66,15 @@ async def run_vep_task(request: VepTaskRequest, background_tasks: BackgroundTask
         task_id=request.task_id,
     )
 
-    return {"status": "task accepted", "message": f"VEP task {request.task_id} accepted for processing"}
+    return {
+        "status": "task accepted",
+        "message": f"VEP task {request.task_id} accepted for processing",
+    }
 
 
 @router.post("/worker/generate-report", status_code=202)
 async def run_report_generation(
-    request: ReportTaskRequest,
-    background_tasks: BackgroundTasks
+    request: ReportTaskRequest, background_tasks: BackgroundTasks
 ):
     """
     This endpoint is called by Google Cloud Tasks to generate the final clinical report.
@@ -106,18 +110,14 @@ async def run_report_generation(
         return {"status": "error", "message": "Artifact service not available"}
 
     report_service = ReportGenerationService(
-        db_client=db_client,
-        artifact_service=artifact_service
+        db_client=db_client, artifact_service=artifact_service
     )
 
-    background_tasks.add_task(
-        report_service.run,
-        task_id=request.task_id
-    )
+    background_tasks.add_task(report_service.run, task_id=request.task_id)
 
     return {
         "status": "task accepted",
-        "message": f"Report generation task {request.task_id} accepted for processing"
+        "message": f"Report generation task {request.task_id} accepted for processing",
     }
 
 
@@ -134,5 +134,5 @@ async def worker_health():
         "service": "genomic-worker",
         "capabilities": ["vep-annotation", "report-generation"],
         "firestore_available": clients.db is not None,
-        "artifact_service_available": adk.artifact_service is not None
+        "artifact_service_available": adk.artifact_service is not None,
     }

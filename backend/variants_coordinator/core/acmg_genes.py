@@ -31,6 +31,7 @@ logger = structlog.get_logger(__name__)
 
 class GeneCategory(Enum):
     """Categories of conditions associated with ACMG reportable genes."""
+
     CANCER = "Cancer predisposition"
     CARDIOVASCULAR = "Cardiovascular disease"
     METABOLIC = "Inborn errors of metabolism"
@@ -68,7 +69,6 @@ ACMG_SF_V3_3_GENES: Set[str] = {
     "TSC2",  # Tuberous sclerosis complex
     "VHL",  # von Hippel-Lindau syndrome
     "WT1",  # WT1-related Wilms tumor
-
     # Cardiovascular disease (41 genes)
     "FBN1",  # Aortopathies
     "TGFBR1",  # Aortopathies
@@ -111,14 +111,12 @@ ACMG_SF_V3_3_GENES: Set[str] = {
     "KCNQ1",  # Long QT syndrome types 1 and 2
     "KCNH2",  # Long QT syndrome types 1 and 2
     "SCN5A",  # Long QT syndrome 3; Brugada syndrome
-
     # Inborn errors of metabolism (5 genes)
     "BTD",  # Biotinidase deficiency (SPECIAL: requires 2 variants)
     "CYP27A1",  # Cerebrotendinous xanthomatosis (NEW in v3.3, SPECIAL: requires 2 variants)
     "GLA",  # Fabry disease
     "OTC",  # Ornithine transcarbamylase deficiency
     "GAA",  # Pompe disease (SPECIAL: requires 2 variants)
-
     # Other conditions (9 genes)
     "ABCD1",  # Adrenoleukodystrophy (NEW in v3.3)
     "HFE",  # Hereditary hemochromatosis (SPECIAL: p.Cys282Tyr homozygous only)
@@ -135,25 +133,91 @@ ACMG_SF_V3_3_GENES: Set[str] = {
 # Genes organized by category for reporting purposes
 ACMG_GENES_BY_CATEGORY: Dict[GeneCategory, Set[str]] = {
     GeneCategory.CANCER: {
-        "APC", "RET", "BRCA1", "BRCA2", "PALB2", "SDHD", "SDHAF2", "SDHC",
-        "SDHB", "MAX", "TMEM127", "BMPR1A", "SMAD4", "TP53", "MLH1", "MSH2",
-        "MSH6", "PMS2", "MEN1", "MUTYH", "NF2", "STK11", "PTEN", "RB1",
-        "TSC1", "TSC2", "VHL", "WT1"
+        "APC",
+        "RET",
+        "BRCA1",
+        "BRCA2",
+        "PALB2",
+        "SDHD",
+        "SDHAF2",
+        "SDHC",
+        "SDHB",
+        "MAX",
+        "TMEM127",
+        "BMPR1A",
+        "SMAD4",
+        "TP53",
+        "MLH1",
+        "MSH2",
+        "MSH6",
+        "PMS2",
+        "MEN1",
+        "MUTYH",
+        "NF2",
+        "STK11",
+        "PTEN",
+        "RB1",
+        "TSC1",
+        "TSC2",
+        "VHL",
+        "WT1",
     },
     GeneCategory.CARDIOVASCULAR: {
-        "FBN1", "TGFBR1", "TGFBR2", "SMAD3", "ACTA2", "MYH11", "PKP2", "DSP",
-        "DSC2", "TMEM43", "DSG2", "RYR2", "CASQ2", "TRDN", "BAG3", "DES",
-        "RBM20", "TNNC1", "TNNT2", "LMNA", "FLNC", "TTN", "CALM1", "CALM2",
-        "CALM3", "COL3A1", "LDLR", "APOB", "PCSK9", "MYH7", "MYBPC3", "TNNI3",
-        "TPM1", "MYL3", "ACTC1", "PRKAG2", "MYL2", "PLN", "KCNQ1", "KCNH2", "SCN5A"
+        "FBN1",
+        "TGFBR1",
+        "TGFBR2",
+        "SMAD3",
+        "ACTA2",
+        "MYH11",
+        "PKP2",
+        "DSP",
+        "DSC2",
+        "TMEM43",
+        "DSG2",
+        "RYR2",
+        "CASQ2",
+        "TRDN",
+        "BAG3",
+        "DES",
+        "RBM20",
+        "TNNC1",
+        "TNNT2",
+        "LMNA",
+        "FLNC",
+        "TTN",
+        "CALM1",
+        "CALM2",
+        "CALM3",
+        "COL3A1",
+        "LDLR",
+        "APOB",
+        "PCSK9",
+        "MYH7",
+        "MYBPC3",
+        "TNNI3",
+        "TPM1",
+        "MYL3",
+        "ACTC1",
+        "PRKAG2",
+        "MYL2",
+        "PLN",
+        "KCNQ1",
+        "KCNH2",
+        "SCN5A",
     },
-    GeneCategory.METABOLIC: {
-        "BTD", "CYP27A1", "GLA", "OTC", "GAA"
-    },
+    GeneCategory.METABOLIC: {"BTD", "CYP27A1", "GLA", "OTC", "GAA"},
     GeneCategory.OTHER: {
-        "ABCD1", "HFE", "ACVRL1", "ENG", "RYR1", "CACNA1S", "HNF1A", "RPE65",
-        "ATP7B", "TTR"
-    }
+        "ABCD1",
+        "HFE",
+        "ACVRL1",
+        "ENG",
+        "RYR1",
+        "CACNA1S",
+        "HNF1A",
+        "RPE65",
+        "ATP7B",
+        "TTR",
+    },
 }
 
 # Genes requiring special handling (autosomal recessive - need 2 pathogenic variants)
@@ -237,7 +301,9 @@ def is_hfe_reportable_variant(gene_symbol: str, variant_notation: str) -> bool:
         return False
 
     # Check if variant matches any of the known notations for p.Cys282Tyr
-    return any(notation in str(variant_notation) for notation in HFE_REPORTABLE_VARIANT_HGVS)
+    return any(
+        notation in str(variant_notation) for notation in HFE_REPORTABLE_VARIANT_HGVS
+    )
 
 
 def filter_variants_to_acmg_genes(variants: List, gene_field: str = "GENE") -> List:
@@ -255,7 +321,7 @@ def filter_variants_to_acmg_genes(variants: List, gene_field: str = "GENE") -> L
     genes_found = set()
 
     for variant in variants:
-        if hasattr(variant, 'info') and variant.info:
+        if hasattr(variant, "info") and variant.info:
             gene = variant.info.get(gene_field)
             if gene and is_acmg_gene(gene):
                 filtered.append(variant)
@@ -264,7 +330,7 @@ def filter_variants_to_acmg_genes(variants: List, gene_field: str = "GENE") -> L
     logger.info(
         f"Filtered {len(variants)} variants to {len(filtered)} in ACMG genes",
         unique_genes=len(genes_found),
-        genes=sorted(genes_found)
+        genes=sorted(genes_found),
     )
 
     return filtered
@@ -296,11 +362,14 @@ def apply_acmg_reporting_rules(annotations_by_gene: Dict[str, List]) -> Dict[str
 
         # Filter out VUS - only report pathogenic/likely pathogenic
         pathogenic_annotations = [
-            ann for ann in annotations
-            if ann.clinical_significance and
-               any(term in ann.clinical_significance.lower()
-                   for term in ['pathogenic', 'likely_pathogenic'])
-               and 'uncertain' not in ann.clinical_significance.lower()
+            ann
+            for ann in annotations
+            if ann.clinical_significance
+            and any(
+                term in ann.clinical_significance.lower()
+                for term in ["pathogenic", "likely_pathogenic"]
+            )
+            and "uncertain" not in ann.clinical_significance.lower()
         ]
 
         if not pathogenic_annotations:
@@ -322,7 +391,9 @@ def apply_acmg_reporting_rules(annotations_by_gene: Dict[str, List]) -> Dict[str
         elif gene_upper == "HFE":
             # Special HFE handling - only report p.Cys282Tyr homozygous
             # This would need additional logic to check exact variant and zygosity
-            logger.debug("HFE variant found - requires specific p.Cys282Tyr homozygous check")
+            logger.debug(
+                "HFE variant found - requires specific p.Cys282Tyr homozygous check"
+            )
             # For now, skip HFE unless we implement detailed variant checking
             continue
 
@@ -348,21 +419,27 @@ def get_acmg_stats() -> Dict[str, any]:
         "year": 2025,
         "total_genes": len(ACMG_SF_V3_3_GENES),
         "cancer_genes": len(ACMG_GENES_BY_CATEGORY[GeneCategory.CANCER]),
-        "cardiovascular_genes": len(ACMG_GENES_BY_CATEGORY[GeneCategory.CARDIOVASCULAR]),
+        "cardiovascular_genes": len(
+            ACMG_GENES_BY_CATEGORY[GeneCategory.CARDIOVASCULAR]
+        ),
         "metabolic_genes": len(ACMG_GENES_BY_CATEGORY[GeneCategory.METABOLIC]),
         "other_genes": len(ACMG_GENES_BY_CATEGORY[GeneCategory.OTHER]),
         "recessive_genes": len(RECESSIVE_GENES),
-        "genes_requiring_special_handling": len(RECESSIVE_GENES) + 1  # +1 for HFE
+        "genes_requiring_special_handling": len(RECESSIVE_GENES) + 1,  # +1 for HFE
     }
 
 
 # Validation on module load
-assert len(ACMG_SF_V3_3_GENES) == 84, f"Expected 84 ACMG genes, found {len(ACMG_SF_V3_3_GENES)}"
+assert len(ACMG_SF_V3_3_GENES) == 84, (
+    f"Expected 84 ACMG genes, found {len(ACMG_SF_V3_3_GENES)}"
+)
 
 # Verify all categorized genes are in main set
 all_categorized = set()
 for genes in ACMG_GENES_BY_CATEGORY.values():
     all_categorized.update(genes)
-assert all_categorized == ACMG_SF_V3_3_GENES, "Mismatch between categorized genes and main gene set"
+assert all_categorized == ACMG_SF_V3_3_GENES, (
+    "Mismatch between categorized genes and main gene set"
+)
 
-logger.info(f"ACMG SF v3.3 module loaded", stats=get_acmg_stats())
+logger.info("ACMG SF v3.3 module loaded", stats=get_acmg_stats())

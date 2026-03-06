@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   createContext,
@@ -7,17 +7,21 @@ import React, {
   useState,
   useCallback,
   useMemo,
-  ReactNode
-} from 'react';
+  ReactNode,
+} from "react";
 import {
   User,
   UserCredential,
   AuthError,
   onAuthStateChanged,
-  Unsubscribe
-} from 'firebase/auth';
-import { doc, onSnapshot, Unsubscribe as FirestoreUnsubscribe } from 'firebase/firestore';
-import { useRouter, usePathname } from 'next/navigation';
+  Unsubscribe,
+} from "firebase/auth";
+import {
+  doc,
+  onSnapshot,
+  Unsubscribe as FirestoreUnsubscribe,
+} from "firebase/firestore";
+import { useRouter, usePathname } from "next/navigation";
 import {
   signInWithGoogle,
   signInWithGitHub,
@@ -34,9 +38,16 @@ import {
   resendEmailVerification,
   checkRedirectResult,
   UserProfile,
-  AuthUser
-} from '@/lib/firebase/auth';
-import { auth, db } from '@/lib/firebase/config';
+  AuthUser,
+} from "@/lib/firebase/auth";
+import { auth, db } from "@/lib/firebase/config";
+
+// Parse allowed domains from environment variable or use defaults
+const ALLOWED_DOMAINS: string[] = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS
+  ? process.env.NEXT_PUBLIC_ALLOWED_DOMAINS.split(",").map((d) =>
+      d.trim().toLowerCase(),
+    )
+  : ["google.com", "altostrat.com"];
 
 /**
  * Helper function to check if email domain is allowed
@@ -45,14 +56,14 @@ const isAllowedDomain = (email: string | null): boolean => {
   if (!email) return false;
 
   // Extract domain from email
-  const domain = email.toLowerCase().split('@')[1];
+  const domain = email.toLowerCase().split("@")[1];
   if (!domain) return false;
 
-  // Check if it's google.com/altostrat.com or a subdomain of these
-  return domain === 'google.com' ||
-         domain === 'altostrat.com' ||
-         domain.endsWith('.google.com') ||
-         domain.endsWith('.altostrat.com');
+  // Check if the domain or its subdomain is in the allowed list
+  return ALLOWED_DOMAINS.some(
+    (allowedDomain) =>
+      domain === allowedDomain || domain.endsWith(`.${allowedDomain}`),
+  );
 };
 
 /**
@@ -68,11 +79,22 @@ interface AuthContextState {
   // Auth methods
   signInWithGoogle: (useRedirect?: boolean) => Promise<UserCredential | null>;
   signInWithGitHub: (useRedirect?: boolean) => Promise<UserCredential | null>;
-  signInWithEmail: (email: string, password: string, remember?: boolean) => Promise<UserCredential>;
-  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<UserCredential>;
+  signInWithEmail: (
+    email: string,
+    password: string,
+    remember?: boolean,
+  ) => Promise<UserCredential>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    displayName?: string,
+  ) => Promise<UserCredential>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  updateProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<void>;
+  updateProfile: (updates: {
+    displayName?: string;
+    photoURL?: string;
+  }) => Promise<void>;
 
   // Token methods
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
@@ -108,8 +130,8 @@ interface AuthProviderProps {
 export function AuthProvider({
   children,
   requireEmailVerification = false,
-  redirectAfterSignIn = '/dashboard',
-  redirectAfterSignOut = '/'
+  redirectAfterSignIn = "/dashboard",
+  redirectAfterSignOut = "/",
 }: AuthProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -131,11 +153,13 @@ export function AuthProvider({
 
   // Check for redirect result on mount (for social logins)
   useEffect(() => {
-    checkRedirectResult().then(result => {
-      if (result?.user) {
-        router.push(redirectAfterSignIn);
-      }
-    }).catch(console.error);
+    checkRedirectResult()
+      .then((result) => {
+        if (result?.user) {
+          router.push(redirectAfterSignIn);
+        }
+      })
+      .catch(console.error);
   }, []);
 
   // Listen to auth state changes
@@ -146,7 +170,7 @@ export function AuthProvider({
     const setupAuthListener = async () => {
       try {
         unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-          console.log('Auth state changed:', firebaseUser?.uid);
+          console.log("Auth state changed:", firebaseUser?.uid);
 
           if (firebaseUser) {
             // Cast to AuthUser
@@ -155,7 +179,7 @@ export function AuthProvider({
 
             // Set up profile listener
             if (!unsubscribeProfile) {
-              const profileRef = doc(db, 'users', firebaseUser.uid);
+              const profileRef = doc(db, "users", firebaseUser.uid);
               unsubscribeProfile = onSnapshot(
                 profileRef,
                 (doc) => {
@@ -169,16 +193,16 @@ export function AuthProvider({
                   }
                 },
                 (error) => {
-                  console.error('Profile listener error:', error);
-                }
+                  console.error("Profile listener error:", error);
+                },
               );
             }
 
             // Check email verification requirement
             if (requireEmailVerification && !firebaseUser.emailVerified) {
               // Redirect to verification page
-              if (pathname !== '/auth/verify-email') {
-                router.push('/auth/verify-email');
+              if (pathname !== "/auth/verify-email") {
+                router.push("/auth/verify-email");
               }
             }
           } else {
@@ -197,7 +221,7 @@ export function AuthProvider({
           setAuthInitialized(true);
         });
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error("Auth initialization error:", error);
         setError(error as AuthError);
         setLoading(false);
         setAuthInitialized(true);
@@ -218,112 +242,124 @@ export function AuthProvider({
   }, [requireEmailVerification, router, pathname]);
 
   // Auth methods with error handling
-  const handleSignInWithGoogle = useCallback(async (useRedirect = false) => {
-    setError(null);
-    try {
-      const result = await signInWithGoogle(useRedirect);
+  const handleSignInWithGoogle = useCallback(
+    async (useRedirect = false) => {
+      setError(null);
+      try {
+        const result = await signInWithGoogle(useRedirect);
 
-      // Domain check after Google sign-in
-      if (result?.user?.email && !isAllowedDomain(result.user.email)) {
-        await firebaseSignOut();
-        const authError = new Error('Access restricted to @google.com and @altostrat.com emails') as AuthError;
-        setError(authError);
-        throw authError;
-      }
+        // Domain check after Google sign-in
+        if (result?.user?.email && !isAllowedDomain(result.user.email)) {
+          await firebaseSignOut();
+          const authError = new Error(
+            "Access restricted to an allowed domain.",
+          ) as AuthError;
+          setError(authError);
+          throw authError;
+        }
 
-      if (result?.user && !useRedirect) {
-        router.push(redirectAfterSignIn);
-      }
-      return result;
-    } catch (error) {
-      const authError = error as AuthError;
-      setError(authError);
-      throw authError;
-    }
-  }, [router, redirectAfterSignIn]);
-
-  const handleSignInWithGitHub = useCallback(async (useRedirect = false) => {
-    setError(null);
-    try {
-      const result = await signInWithGitHub(useRedirect);
-
-      // Domain check after GitHub sign-in
-      if (result?.user?.email && !isAllowedDomain(result.user.email)) {
-        await firebaseSignOut();
-        const authError = new Error('Access restricted to @google.com and @altostrat.com emails') as AuthError;
-        setError(authError);
-        throw authError;
-      }
-
-      if (result?.user && !useRedirect) {
-        router.push(redirectAfterSignIn);
-      }
-      return result;
-    } catch (error) {
-      const authError = error as AuthError;
-      setError(authError);
-      throw authError;
-    }
-  }, [router, redirectAfterSignIn]);
-
-  const handleSignInWithEmail = useCallback(async (
-    email: string,
-    password: string,
-    remember = true
-  ) => {
-    setError(null);
-
-    // Domain check before sign-in
-    if (!isAllowedDomain(email)) {
-      const authError = new Error('Access restricted to @google.com and @altostrat.com emails') as AuthError;
-      setError(authError);
-      throw authError;
-    }
-
-    try {
-      await setAuthPersistence(remember);
-      const result = await signInWithEmail(email, password);
-      if (result.user) {
-        router.push(redirectAfterSignIn);
-      }
-      return result;
-    } catch (error) {
-      const authError = error as AuthError;
-      setError(authError);
-      throw authError;
-    }
-  }, [router, redirectAfterSignIn]);
-
-  const handleSignUpWithEmail = useCallback(async (
-    email: string,
-    password: string,
-    displayName?: string
-  ) => {
-    setError(null);
-
-    // Domain check before sign-up
-    if (!isAllowedDomain(email)) {
-      const authError = new Error('Access restricted to @google.com and @altostrat.com emails') as AuthError;
-      setError(authError);
-      throw authError;
-    }
-
-    try {
-      const result = await signUpWithEmail(email, password, displayName);
-      if (result.user) {
-        if (requireEmailVerification) {
-          router.push('/auth/verify-email');
-        } else {
+        if (result?.user && !useRedirect) {
           router.push(redirectAfterSignIn);
         }
+        return result;
+      } catch (error) {
+        const authError = error as AuthError;
+        setError(authError);
+        throw authError;
       }
-      return result;
-    } catch (error) {
-      const authError = error as AuthError;
-      setError(authError);
-      throw authError;
-    }
-  }, [router, redirectAfterSignIn, requireEmailVerification]);
+    },
+    [router, redirectAfterSignIn],
+  );
+
+  const handleSignInWithGitHub = useCallback(
+    async (useRedirect = false) => {
+      setError(null);
+      try {
+        const result = await signInWithGitHub(useRedirect);
+
+        // Domain check after GitHub sign-in
+        if (result?.user?.email && !isAllowedDomain(result.user.email)) {
+          await firebaseSignOut();
+          const authError = new Error(
+            "Access restricted to @google.com, @altostrat.com @servier.com emails",
+          ) as AuthError;
+          setError(authError);
+          throw authError;
+        }
+
+        if (result?.user && !useRedirect) {
+          router.push(redirectAfterSignIn);
+        }
+        return result;
+      } catch (error) {
+        const authError = error as AuthError;
+        setError(authError);
+        throw authError;
+      }
+    },
+    [router, redirectAfterSignIn],
+  );
+
+  const handleSignInWithEmail = useCallback(
+    async (email: string, password: string, remember = true) => {
+      setError(null);
+
+      // Domain check before sign-in
+      if (!isAllowedDomain(email)) {
+        const authError = new Error(
+          "Access restricted to an allowed domain.",
+        ) as AuthError;
+        setError(authError);
+        throw authError;
+      }
+
+      try {
+        await setAuthPersistence(remember);
+        const result = await signInWithEmail(email, password);
+        if (result.user) {
+          router.push(redirectAfterSignIn);
+        }
+        return result;
+      } catch (error) {
+        const authError = error as AuthError;
+        setError(authError);
+        throw authError;
+      }
+    },
+    [router, redirectAfterSignIn],
+  );
+
+  const handleSignUpWithEmail = useCallback(
+    async (email: string, password: string, displayName?: string) => {
+      setError(null);
+
+      // Domain check before sign-up
+      if (!isAllowedDomain(email)) {
+        const authError = new Error(
+          "Access restricted to an allowed domain.",
+        ) as AuthError;
+        setError(authError);
+        throw authError;
+      }
+
+      try {
+        const result = await signUpWithEmail(email, password, displayName);
+        if (result.user) {
+          if (requireEmailVerification) {
+            router.push("/auth/verify-email");
+          } else {
+            router.push(redirectAfterSignIn);
+          }
+        }
+        return result;
+      } catch (error) {
+        const authError = error as AuthError;
+        setError(authError);
+        throw authError;
+      }
+    },
+    [router, redirectAfterSignIn, requireEmailVerification],
+  );
 
   const handleSignOut = useCallback(async () => {
     setError(null);
@@ -348,25 +384,25 @@ export function AuthProvider({
     }
   }, []);
 
-  const handleUpdateProfile = useCallback(async (updates: {
-    displayName?: string;
-    photoURL?: string;
-  }) => {
-    setError(null);
-    try {
-      await updateUserProfile(updates);
-    } catch (error) {
-      const authError = error as AuthError;
-      setError(authError);
-      throw authError;
-    }
-  }, []);
+  const handleUpdateProfile = useCallback(
+    async (updates: { displayName?: string; photoURL?: string }) => {
+      setError(null);
+      try {
+        await updateUserProfile(updates);
+      } catch (error) {
+        const authError = error as AuthError;
+        setError(authError);
+        throw authError;
+      }
+    },
+    [],
+  );
 
   const handleGetIdToken = useCallback(async (forceRefresh = false) => {
     try {
       return await getIdToken(forceRefresh);
     } catch (error) {
-      console.error('Failed to get ID token:', error);
+      console.error("Failed to get ID token:", error);
       return null;
     }
   }, []);
@@ -375,7 +411,7 @@ export function AuthProvider({
     try {
       return await getIdTokenResult(forceRefresh);
     } catch (error) {
-      console.error('Failed to get ID token result:', error);
+      console.error("Failed to get ID token result:", error);
       return null;
     }
   }, []);
@@ -399,47 +435,50 @@ export function AuthProvider({
     try {
       await setAuthPersistence(remember);
     } catch (error) {
-      console.error('Failed to set persistence:', error);
+      console.error("Failed to set persistence:", error);
     }
   }, []);
 
   // Memoized context value
-  const contextValue = useMemo<AuthContextState>(() => ({
-    user,
-    profile,
-    loading,
-    error,
-    signInWithGoogle: handleSignInWithGoogle,
-    signInWithGitHub: handleSignInWithGitHub,
-    signInWithEmail: handleSignInWithEmail,
-    signUpWithEmail: handleSignUpWithEmail,
-    signOut: handleSignOut,
-    resetPassword: handleResetPassword,
-    updateProfile: handleUpdateProfile,
-    getIdToken: handleGetIdToken,
-    getIdTokenResult: handleGetIdTokenResult,
-    isEmailVerified,
-    resendVerificationEmail: handleResendVerificationEmail,
-    clearError,
-    setRememberMe
-  }), [
-    user,
-    profile,
-    loading,
-    error,
-    handleSignInWithGoogle,
-    handleSignInWithGitHub,
-    handleSignInWithEmail,
-    handleSignUpWithEmail,
-    handleSignOut,
-    handleResetPassword,
-    handleUpdateProfile,
-    handleGetIdToken,
-    handleGetIdTokenResult,
-    handleResendVerificationEmail,
-    clearError,
-    setRememberMe
-  ]);
+  const contextValue = useMemo<AuthContextState>(
+    () => ({
+      user,
+      profile,
+      loading,
+      error,
+      signInWithGoogle: handleSignInWithGoogle,
+      signInWithGitHub: handleSignInWithGitHub,
+      signInWithEmail: handleSignInWithEmail,
+      signUpWithEmail: handleSignUpWithEmail,
+      signOut: handleSignOut,
+      resetPassword: handleResetPassword,
+      updateProfile: handleUpdateProfile,
+      getIdToken: handleGetIdToken,
+      getIdTokenResult: handleGetIdTokenResult,
+      isEmailVerified,
+      resendVerificationEmail: handleResendVerificationEmail,
+      clearError,
+      setRememberMe,
+    }),
+    [
+      user,
+      profile,
+      loading,
+      error,
+      handleSignInWithGoogle,
+      handleSignInWithGitHub,
+      handleSignInWithEmail,
+      handleSignUpWithEmail,
+      handleSignOut,
+      handleResetPassword,
+      handleUpdateProfile,
+      handleGetIdToken,
+      handleGetIdTokenResult,
+      handleResendVerificationEmail,
+      clearError,
+      setRememberMe,
+    ],
+  );
 
   // Don't render children until auth is initialized
   if (!authInitialized) {
@@ -453,9 +492,7 @@ export function AuthProvider({
   }
 
   return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 }
 
@@ -465,7 +502,7 @@ export function AuthProvider({
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
@@ -473,7 +510,7 @@ export function useAuth() {
 /**
  * Hook to require authentication
  */
-export function useRequireAuth(redirectTo = '/auth/login') {
+export function useRequireAuth(redirectTo = "/auth/login") {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();

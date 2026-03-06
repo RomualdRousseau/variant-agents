@@ -1,6 +1,7 @@
 """
 Authentication-specific routes.
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any
 from pydantic import BaseModel
@@ -30,25 +31,17 @@ async def verify_token(request: TokenVerifyRequest):
                 "email": decoded_token.get("email"),
                 "email_verified": decoded_token.get("email_verified", False),
                 "name": decoded_token.get("name"),
-            }
+            },
         }
     except HTTPException as e:
-        return {
-            "status": "error",
-            "valid": False,
-            "message": e.detail
-        }
+        return {"status": "error", "valid": False, "message": e.detail}
     except Exception as e:
-        return {
-            "status": "error",
-            "valid": False,
-            "message": str(e)
-        }
+        return {"status": "error", "valid": False, "message": str(e)}
 
 
 @router.get("/auth/me")
 async def get_current_user_info(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Get current authenticated user information.
@@ -62,5 +55,5 @@ async def get_current_user_info(
             "email_verified": current_user.get("email_verified", False),
             "name": current_user.get("name"),
             "firebase_uid": current_user.get("uid"),
-        }
+        },
     }

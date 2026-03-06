@@ -29,6 +29,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.python-version
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -104,3 +105,6 @@ dmypy.json
 # IDE settings
 .vscode/
 .idea/
+
+# Ruff cache
+.ruff_cache/
