@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 import structlog
 from google.adk.tools import FunctionTool, LongRunningFunctionTool, ToolContext
 from google.cloud import firestore_v1, tasks_v2
+from retry.api import retry_call
 
 from ..core import clients
 from ..core.acmg_genes import is_acmg_gene
@@ -353,8 +354,10 @@ async def start_vep_annotation(tool_context: ToolContext) -> Dict[str, Any]:
             }
         }
 
-        response = clients.tasks_client.create_task(
-            request={"parent": parent, "task": task}
+        response = retry_call(
+            clients.tasks_client.create_task,
+            fkwargs={"request": {"parent": parent, "task": task}},
+            tries=3,
         )
         tool_logger.info("Dispatched task to Cloud Tasks.", task_name=response.name)
 

@@ -7,6 +7,9 @@ pydantic-settings==2.10.1
 # For structured logging
 structlog==25.4.0
 
+# For retry decorator
+retry==0.9.2
+
 # For interacting with Google Cloud Storage, BigQuery, Gemini, and Firestore
 google-cloud-storage==2.19.0
 google-genai==1.32.0
@@ -20,3 +23,4 @@ httpx==0.28.1
 
 # Web server used by ADK
 uvicorn==0.35.0
+

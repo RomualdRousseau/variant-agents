@@ -53,10 +53,10 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: "8Gi"
+              memory: "2Gi"
             limits:
               cpu: "2"
-              memory: "16Gi"
+              memory: "4Gi"
           readinessProbe:
             httpGet:
               path: /
@@ -104,7 +104,7 @@ spec:
                 name: genomics-agent-service
                 port:
                   number: 8080
-          # Frontend 
+          # Frontend
           - path: /
             pathType: Prefix
             backend:

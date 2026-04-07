@@ -28,6 +28,9 @@ deploy-iap:
   kubectl set env deployment/genomics-agent WORKER_URL=$WORKER_URL
   kubectl rollout restart deployment/genomics-agent
 
+test-deploy-iap:
+  envsubst < gke/genomics-deployment-iap.yaml
+
 # View the status of backend pods in Kubernetes
 status:
   kubectl get pods -l app=genomics-agent
@@ -329,7 +332,7 @@ create-backend-service:
 add-backend-to-service: _get-instance-group
   gcloud compute backend-services add-backend {{BACKEND_SERVICE_NAME}} \
     --instance-group=$INSTANCE_GROUP_NAME \
-    --instance-group-zone={{GOOGLE_CLOUD_ZONE}} \
+    --instance-group-zone=$GOOGLE_CLOUD_ZONE \
     --balancing-mode=UTILIZATION \
     --max-utilization=0.8 \
     --global
@@ -367,3 +370,12 @@ destroy-load-balancer:
   gcloud compute health-checks delete {{HEALTH_CHECK_NAME}} --quiet
   gcloud compute ssl-certificates delete {{SSL_CERT_NAME}} --global --quiet
   gcloud compute addresses delete {{STATIC_IP_NAME}} --global --quiet
+
+# Change VM
+change-vm:
+  gcloud container node-pools update genomics-n2d-pool \
+    --cluster genomics-cluster \
+    --location=europe-west1-b \
+    --machine-type c2d-standard-16 \
+    --disk-type pd-ssd \
+    --disk-size 100

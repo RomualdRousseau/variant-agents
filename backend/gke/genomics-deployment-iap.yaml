@@ -98,11 +98,11 @@ spec:
               value: "${GRPC_DNS_RESOLVER}"
           resources:
             requests:
-              cpu: "20"
-              memory: "120Gi"
+              cpu: "12"
+              memory: "48Gi"
             limits:
-              cpu: "24"
-              memory: "224Gi"
+              cpu: "14"
+              memory: "61Gi"
           volumeMounts:
             - name: vep-cache
               mountPath: /mnt/cache
@@ -111,6 +111,11 @@ spec:
             httpGet:
               path: /health
               port: 8080
+              scheme: HTTP
+            failureThreshold: 3
+            periodSeconds: 600
+            successThreshold: 1
+            timeoutSeconds: 1
       volumes:
         - name: vep-cache
           gcePersistentDisk:
