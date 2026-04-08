@@ -376,6 +376,6 @@ change-vm:
   gcloud container node-pools update genomics-n2d-pool \
     --cluster genomics-cluster \
     --location=europe-west1-b \
-    --machine-type c2d-standard-16 \
+    --machine-type n2d-standard-16 \
     --disk-type pd-ssd \
     --disk-size 100
